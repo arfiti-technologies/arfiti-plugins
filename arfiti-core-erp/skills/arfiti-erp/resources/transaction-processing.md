@@ -482,6 +482,19 @@ inactive effective codes and missing, inactive or header tax accounts refuse
 the journal atomically. This changes new postings only; it does not reclassify
 historical journals or add reverse-charge/non-recoverable-tax support.
 
+**Journal balance includes the generated tax (AR-1397):** a taxed line that is
+not tax-inclusive gets its tax added on its own side, so the other side carries
+net plus tax (debit 100 expense with a 22 % code, credit 122 bank). Journal
+posting and journal-style `transaction.update` check the totals that will be
+posted, at pre-flight (`validate_only`) as at execution. Tax-inclusive lines add
+nothing; reverse-charge lines add nothing on a `transaction.update` (input and
+output offset). Never enter the tax line by hand as well as the code: that is
+refused as unbalanced. The refusal reads `Unbalanced entry: DR=…, CR=…` with the
+posted totals, exactly (no tolerance: the ledger guard has none for the document amounts). Journal posting refuses a tax-exclusive line with a
+reverse-charge code, or a code with `is_recoverable: false` on a purchase line,
+for a VAT-registered entity: it cannot book them correctly. Post such a purchase
+as an AP invoice, or enter the tax lines explicitly without the code.
+
 
 **Required Fields:**
 | Field | Type | Description |
@@ -729,6 +742,8 @@ submit(object_type="transaction", operation="update", data=JSON.stringify({
 
 - `item_id` / `master_item_id` are accepted on update lines and stored on the replacement line. A patch line (with `id`) that omits them keeps the existing item.
 - Tax on a journal-style replacement (debit/credit lines) routes by the line's account type: expense/cogs → the code's `purchase_account_number`, revenue → `sales_account_number`, otherwise `default_tax_account_number`. A missing/inactive/header tax account refuses the update; tax is never dropped.
+- Balance on a journal-style replacement is checked on the posted totals: a tax-exclusive taxed line adds its tax on its own side, so send net plus tax on the other side (AR-1397). A patch edit is rebuilt from the amounts originally entered, so patching only a line's tax code changes only its tax (the other side must still balance).
+- Tax on a bill replacement is booked exactly as posting books it, for every code family: an ordinary code with `is_recoverable: false`, or any code for an entity that is not VAT registered, adds the tax to cost and payable with no input-VAT line (AR-1415). See [Tax Management](tax-management.md) (Ordinary non-recoverable VAT, and editing bills).
 - Read the transaction back after an update to confirm what was stored.
 
 ### Success Response
@@ -1109,7 +1124,9 @@ Tax posting adapts automatically based on whether the entity is VAT-registered. 
 - AR Invoice: Tax skipped entirely — non-VAT seller cannot charge VAT. AR debit = net only
 - Journal Entry: Tax rolled into original GL line (no separate tax GL line)
 
-**Reverse charge tax codes**: Blocked entirely for non-VAT entities (validation error). Reverse charge is a VAT mechanism that requires VAT registration.
+**Ordinary code with `is_recoverable: false`** (VAT-registered entity, AP): treated like the non-VAT case — the tax is rolled into the expense line and the payable; no input-VAT line. `transaction.update` books it the same way (AR-1415).
+
+**Reverse charge tax codes**: Blocked for non-VAT entities (validation error on posting; on `transaction.update` when the line computes tax — a zero-rate one passes). Reverse charge is a VAT mechanism that requires VAT registration.
 
 **Reverse charge on a VAT-registered entity** (AP): the payable stays at the net amount. A recoverable code posts DR input VAT / CR reverse-charge output VAT. A code with `is_recoverable: false` posts DR cost (net + VAT) / CR AP (net) / CR reverse-charge output VAT (AR-1413); credit memos and `transaction.update` mirror it. See [Tax Management](tax-management.md) (Non-recoverable reverse charge).
 
