@@ -649,6 +649,14 @@ submit(object_type="agent_request", operation="update", data=JSON.stringify({
 - Only a person answers a review task. An agent sending a status or
   `response_data` is refused, the agent that raised it included; it may only
   cancel a task it raised itself.
+- Only a person who can read the task answers or changes it: the person it is
+  assigned to, a member holding its assigned role, or an owner or admin, within
+  their companies. If `get_entity("agent_request", …)` does not return the task
+  for the signed-in person, `respond` and `update` refuse it with "Agent request
+  <id> not found", the same answer as for an id that does not exist, and
+  nothing changes. Do not retry with another operation or a guessed version;
+  tell the person the task is not theirs to answer and that an owner or admin
+  can assign it to them.
 
 ### Request Flow
 
