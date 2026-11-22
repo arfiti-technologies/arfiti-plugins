@@ -19,7 +19,8 @@ HTTP 403 for domain or target-entity permission denial, retaining a string
 A null workflow `required_permission` does not bypass the shared domain floor.
 That floor covers contracts and their lines (customer contract: `ar:write`,
 vendor contract: `ap:write`, judged by the stored contract and its entity),
-every bank statement line operation (`accounting:write` or `banking:write`; AP-
+every bank statement line operation (`accounting:write` or `banking:write`;
+`bank_statement_lines:write` is an alternative only for match/unmatch; AP-
 and AR-only roles cannot match bank lines) and creating an attachment (write
 authority over the record it is attached to). A refusal is `permission_denied`
 naming the missing permission; ask someone who holds it rather than retrying.
@@ -28,6 +29,20 @@ claim creation and cached replay. Current access loss denies a repeated request
 without exposing its earlier result. A preflight denial creates no execution or
 claim; an execution-time failure remains uncertain until verified recovery. Keep
 its request identity. This does not change MCP tool response contracts.
+
+**Dedicated bank-line access:** A custom role can carry `bank_statement_lines:write` for bank
+statement line matching/unmatching. The shared domain floor refuses exclusion,
+exclusion revocation and provenance resolution for this grant, even when the
+workflow has no configured permission. Create or
+update the role through the governed `role` workflows, then assign it with explicit
+`entity_ids` through `user_role.assign`. Keep approval and current-authority checks;
+do not widen a shared AP role or substitute `accounting:write`. This grant does not
+confer AR/AP posting, general ledger writes or bank account administration, and
+additional workflow permissions still apply. Bank agent task-answer authority is
+a separate check and is not broadened by this grant. The AR-1434 catalog change must be
+deployed before this grant can be provisioned. `banking:write` is broader: it also
+authorizes bank-feed import through `bank_statement.sync` and existing Plaid
+connection creation, linking, mapping, import-start changes and disconnection. Do not substitute it for narrowly approved line access.
 
 **What you can do:**
 - List all roles (system and custom) for the organization

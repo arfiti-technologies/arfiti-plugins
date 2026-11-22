@@ -173,6 +173,21 @@ a demonstrated control difference remains blocking.
 GL reports include both original and reversing journals at their own dates.
 Filtering out reversed originals while retaining reversals creates a false balance.
 
+After migration 921, a plain same-functional-currency payment or credit application
+can accompany a verified native carrying receipt in dated AP/AR aging. The server
+verifies both posted journals, source capacity, dated application and party/entity
+scope before adding the one-to-one amount. It does not guess a foreign carrying
+release. A 1,200 invoice less 700 cash and 100 credit can therefore show 400 when
+that evidence passes; the 800 applied total is not 800 cash. Unapply/reversal dates
+remain effective-dated. Missing or inconsistent evidence still withholds balances
+and authoritative totals. Rerun after the approved migration; do not edit posted
+records or application history merely to obtain a passing aging report.
+A valid simple source split across a receipt-backed invoice and an ordinary invoice
+without receipts remains outside this bounded calculation: its source balance and
+authoritative totals are withheld even if one invoice balance is explainable. Report
+that unsupported scope; do not call the applications corrupt or rewrite them to make
+the report pass.
+
 ## Consolidated Reports
 
 Multi-entity reports — raw cross-entity aggregation. Intercompany eliminations are NOT implemented: intercompany balances remain in the totals.
