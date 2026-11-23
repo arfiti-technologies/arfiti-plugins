@@ -75,6 +75,12 @@ reports"):
     deduction, so requiring it is our derivation, not a sentence in the source).
   * Column 2 is the partner's Estonian register code or personal ID code, never a
     VAT number: validate() refuses a reg-code value with a country prefix.
+  * AR-1439 (EMTA KMD INF form and instructions 07.2025, Estonian text
+    vorm_kmd_inf_2025_07.pdf; EMTA part A / part B examples 11.12.2025; EMTA page
+    "Käibedeklaratsiooni lisa täitmine"): cross-border reverse-charge purchases are
+    not reported; a negative part B deduction on an ordinary invoice goes to a person;
+    a part A invoice with two or more rates incl. a negative rate group is declared
+    with code 03; a part A § 41¹ line (code 02) with column 9 filled is warned about.
 
 Usage:
     python3 generate_kmd.py --input /tmp/kmd_data_14276473.json --output /tmp/
@@ -413,6 +419,32 @@ def validate(data: dict) -> List[str]:
     return errors
 
 
+def domestic_reverse_charge_warnings(data: dict) -> List[str]:
+    """
+    Warn about a part A line with special code 02 (VAT Act § 41¹ supply, the buyer
+    accounts the VAT) that fills column 9 (sumForRateInPeriod). "The party transferring
+    goods taxable under the special procedure provided for in § 41¹ ... shall not fill in
+    column 9" (EMTA KMD INF instructions 2025-07, part A column 9; part A example: net
+    1400, rate 24 %, column 9 empty, code 02 — the supply goes to KMD line 9). A warning,
+    not a refusal: the instructions put general-procedure and § 41¹ supply at 24 % on the
+    same row, so a row of an invoice carrying both may hold the general part in column 9.
+    How such a row is filled is not settled by the sources; a person checks it.
+    """
+    warnings: List[str] = []
+    for i, line in enumerate(_annex_lines(data.get("sales_annex"))):
+        if DOMESTIC_REVERSE_CHARGE_SALES_CODE not in _special_codes(line.get("comments")):
+            continue
+        if _has_value(line.get("sumForRateInPeriod")):
+            warnings.append(
+                f"sales_annex.lines[{i}]: special code {DOMESTIC_REVERSE_CHARGE_SALES_CODE} "
+                "(VAT Act § 41¹ supply) with sumForRateInPeriod (column 9) filled. A § 41¹ "
+                "seller leaves column 9 empty (the supply goes to KMD line 9, "
+                "supplySpecialArrangements). Column 9 may hold only general-procedure "
+                "supply on the same invoice; a person confirms that before filing."
+            )
+    return warnings
+
+
 def _has_value(value) -> bool:
     return value not in (None, "")
 
@@ -559,7 +591,163 @@ INF_GROSS_TOLERANCE = Decimal("0.02")
 BOOLEAN_INVOICE_FLAGS = (
     "has_positive_rate_supply", "registry_code_verified", "non_resident",
     "travel_special_procedure_only", "professional_secrecy", "counted_in_earlier_period",
+    "cross_border_reverse_charge", "import_reverse_charge",
 )
+# Part A special code 03 (KMD INF instructions 07.2025, part A column 10): the invoice
+# contains supply at two or more rates "incl. negative supply" ("sealhulgas negatiivset
+# käivet"). EMTA's part A examples (11.12.2025) show it: invoice 1500 = 24 % 2000 and
+# 9 % −500, two rows, column 6 = 1500 on both, column 9 = 2000 and −500, code 03.
+MIXED_RATE_SPECIAL_CODE = "03"
+# Up to 4 lines are declared per invoice in part A (KMD INF instructions, part A).
+MAX_PART_A_LINES_PER_INVOICE = 4
+# Part A special code 02 (VAT Act § 41¹ supply, the buyer accounts the VAT). "The party
+# transferring goods taxable under the special procedure provided for in § 41¹ ... shall
+# not fill in column 9" (KMD INF instructions, part A column 9).
+DOMESTIC_REVERSE_CHARGE_SALES_CODE = "02"
+# The rates whose supply the annex covers (KMD INF instructions 07.2025: 24 %, 13 %,
+# 9 %, in exceptional cases 22 %, 20 % and 5 %). A line_nets rate is canonicalised
+# ("24.00" -> "24", see _line_rate) so one rate cannot be spelled two ways and pass as
+# two rate groups. A 0 %, exempt or untaxed line has rate null; a zero rate is refused.
+# A positive rate outside this set sends the invoice to a person (`rate_review`). A
+# special-procedure line (§ 41/§ 42/§ 41¹) carries its rate and "special_procedure".
+ANNEX_LINE_RATES = {"24": Decimal("0.24"), "22": Decimal("0.22"), "20": Decimal("0.20"),
+                    "13": Decimal("0.13"), "9": Decimal("0.09"), "5": Decimal("0.05")}
+# The line tie allows a cent per line for separate EUR roundings, up to this much.
+LINE_NETS_MAX_TOLERANCE = Decimal("0.10")
+
+
+def _line_nets(inv: dict, label: str) -> Optional[List[Tuple[Optional[str], Decimal, bool]]]:
+    """The invoice's document-line nets as (rate, signed net, special procedure), or None.
+
+    `line_nets` is a list of {"rate": <column-7 rate value, e.g. "24" or "9", for a line
+    whose tax code is at 24/22/20/13/9/5 %; null for a 0 %, exempt or untaxed line>,
+    "net_amount": <the line's net in EUR, in the document's own sign>}. A credit memo's
+    lines are stored positive, so a credit memo line enters positive here and a negative
+    one is a negative line on the credit memo. Optional "special_procedure": true marks a
+    line under a special procedure (VAT Act § 41/§ 42 margin scheme, or § 41¹ domestic
+    reverse charge), whose part A row carries code 01 or 02 as well.
+    """
+    raw = inv.get("line_nets")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"{label}: line_nets must be a non-empty array of "
+                         "{rate, net_amount} objects")
+    out: List[Tuple[Optional[str], Decimal, bool]] = []
+    for i, line in enumerate(raw):
+        if not isinstance(line, dict):
+            raise ValueError(f"{label}: line_nets[{i}] must be an object")
+        rate = _line_rate(line.get("rate"), f"{label}: line_nets[{i}].rate")
+        value = required_amount(line, "net_amount", f"{label} line_nets[{i}]")
+        special = line.get("special_procedure", False)
+        if not isinstance(special, bool):
+            raise ValueError(f"{label}: line_nets[{i}].special_procedure must be true or "
+                             f"false, got {special!r}")
+        out.append((rate, value, special))
+    return out
+
+
+def _line_rate(raw, where: str) -> Optional[str]:
+    """A line_nets rate as a canonical number string, or None for a 0 %/exempt line.
+
+    The ERP returns a tax code's `default_rate` as a decimal, so "24", "24.0", "24.00"
+    and 24 are the same rate and all become "24". A zero rate ("0", "0.00") is refused:
+    a 0 %, exempt or untaxed line is passed as null, so a zero-rated line cannot pass as
+    a rate group. A positive rate outside the annex rates (e.g. an organisation's own
+    21 %) is returned as is; the selector sends that invoice to a person
+    (`rate_review`) instead of stopping the whole selection. Anything that is not a
+    number is refused.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, (str, int, float)):
+        raise ValueError(f"{where} must be the tax code's rate as a number, or null for a "
+                         f"0 %, exempt or untaxed line, got {raw!r}")
+    try:
+        value = Decimal(str(raw).strip())
+    except InvalidOperation:
+        raise ValueError(f"{where} must be the tax code's rate as a number, or null for a "
+                         f"0 %, exempt or untaxed line, got {raw!r}") from None
+    if not value.is_finite() or value < 0:
+        raise ValueError(f"{where} must be a positive rate, or null, got {raw!r}")
+    if value == 0:
+        raise ValueError(f"{where} is a zero rate ({raw!r}): pass a 0 %, exempt or untaxed "
+                         "line with rate null")
+    if value == value.to_integral_value():
+        return str(int(value))
+    return format(value.normalize(), "f")
+
+
+def line_nets_mismatch(lines: List[Tuple[Optional[str], Decimal, bool]], document_net: Decimal,
+                       label: str) -> Optional[str]:
+    """Describe line nets that do not add up to the invoice's net, or None.
+
+    Each line converted to EUR and rounded separately may differ from the invoice's net
+    by a cent per line, up to LINE_NETS_MAX_TOLERANCE.
+    """
+    total = sum((v for _r, v, _sp in lines), Decimal("0.00"))
+    tolerance = max(INF_GROSS_TOLERANCE,
+                    min(Decimal("0.01") * len(lines), LINE_NETS_MAX_TOLERANCE))
+    if abs(total - document_net) <= tolerance:
+        return None
+    return (f"{label}: line_nets add up to {total:.2f}, the invoice's net is "
+            f"{document_net:.2f}")
+
+
+def mixed_rate_rows(lines: List[Tuple[Optional[str], Decimal, bool]],
+                    vat: Optional[Decimal]) -> Tuple[Optional[List[dict]], Optional[str]]:
+    """Part A rows for an ordinary invoice whose negative lines are whole rate groups.
+
+    Returns (rows, None) — one row per rate, signed net, document order — when the
+    invoice is the case EMTA's instructions and examples settle: supply at two to four
+    rates, a negative rate group among them, no negative 0 %/exempt/untaxed line, no
+    rate whose lines carry both signs (negative lines at a single rate are not settled
+    by the sources), every line under the general procedure (a § 41/§ 42/§ 41¹ line
+    needs codes this tool does not assign, and a § 41¹ net stays out of column 9), and
+    the invoice's VAT equal to Σ rate-group net × rate (so a line cannot carry another
+    rate's label). Otherwise (None, the reason a person decides). Zero-net lines carry
+    no sign and are left out. The caller checks the document type, that the invoice's
+    net is above zero and (sign_inconsistency) that its VAT and total are not negative.
+    """
+    def person(why: str) -> Tuple[None, str]:
+        return None, (f"invoice with negative lines: {why}; EMTA's instructions do not "
+                      "settle how it is shown, a person decides")
+
+    def check_data(why: str) -> Tuple[None, str]:
+        return None, (f"invoice with negative lines: {why}; a person checks the invoice's "
+                      "figures before it can be declared under code 03")
+
+    groups: Dict[str, List[Decimal]] = {}
+    for rate, value, special in lines:
+        if special:
+            return person("a line under a special procedure (§ 41/§ 42/§ 41¹)")
+        if value == 0:
+            continue
+        if rate is None:
+            if value < 0:
+                return person("a negative 0 %/exempt/untaxed line")
+            continue
+        groups.setdefault(rate, []).append(value)
+    for rate, values in groups.items():
+        if any(v < 0 for v in values) and any(v > 0 for v in values):
+            return person(f"lines of both signs at the single rate {rate} %")
+    if len(groups) < 2:
+        return person("negative supply at a single rate")
+    if len(groups) > MAX_PART_A_LINES_PER_INVOICE:
+        return person(f"supply at {len(groups)} rates, more than the "
+                      f"{MAX_PART_A_LINES_PER_INVOICE} lines part A takes per invoice")
+    totals = {rate: sum(values, Decimal("0.00")) for rate, values in groups.items()}
+    if not any(t < 0 for t in totals.values()):   # defensive: unreachable from the checks above
+        return person("no rate group is negative overall")
+    if vat is None:
+        return check_data("no vat_amount to check the rate labels against")
+    expected = sum((t * ANNEX_LINE_RATES[r] for r, t in totals.items()), Decimal("0"))
+    tolerance = max(INF_GROSS_TOLERANCE,
+                    min(Decimal("0.01") * len(lines), LINE_NETS_MAX_TOLERANCE))
+    if abs(expected - vat) > tolerance:
+        return check_data(f"the rate groups give VAT {expected:.2f}, the invoice's VAT is "
+                          f"{vat:.2f} (a rate label may be wrong)")
+    return [{"tax_rate": r, "net_amount": f"{t:.2f}"} for r, t in totals.items()], None
 
 
 def gross_mismatch(inv: dict, net: Decimal, label: str, credit: bool) -> Optional[str]:
@@ -618,6 +806,20 @@ def sign_inconsistency(inv: dict, net: Decimal, label: str, credit: bool) -> Opt
             "is for a person to decide")
 
 
+def negative_line_reason(side: str, credit: bool) -> str:
+    """Why an invoice whose lines carry both signs goes to a person."""
+    if side == "B":
+        return ("purchase invoice with lines of both signs: part B has one row per "
+                "invoice and EMTA's instructions give no presentation for it; a person "
+                "decides")
+    if credit:
+        return ("credit invoice with lines of both signs: EMTA's instructions give no "
+                "presentation for it; a person decides")
+    # Side A ordinary invoice with a net above zero is decided by mixed_rate_rows.
+    return ("invoice with lines of both signs and a total of zero or below: EMTA's "
+            "instructions do not settle how it is shown; a person decides")
+
+
 def select_inf_partners(invoices: List[dict], side: str) -> dict:
     """
     Decide which partners' invoices go into KMD INF part A (side "A", invoices issued)
@@ -638,6 +840,32 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         with a non-resident that has no register code assigned in Estonia.
       * Part B: an invoice whose VAT is not deducted in field 5 this period is not
         presented (`vat_deducted_in_period` 0 or absent).
+      * Part B covers invoices received from persons registered in Estonia as VAT
+        payers (instructions, part B). Invoices for cross-border transactions that are
+        reverse-charged in Estonia (intra-Community acquisitions, services from abroad)
+        are not shown at all (EMTA page "Käibedeklaratsiooni lisa täitmine"):
+        `cross_border_reverse_charge: true` excludes them by that rule, whatever the
+        supplier's register code. Such an invoice that also carries VAT charged by the
+        supplier goes to `reverse_charge_review`. Domestic reverse charge (VAT Act
+        § 41¹) is not cross-border and is shown (part B code 12, part A code 02).
+      * Part B takes a minus sign only on a credit invoice and on an invoice unpaid
+        under VAT Act § 29¹(4) (instructions, part B). A negative
+        `vat_deducted_in_period` or a negative total on an ordinary purchase invoice
+        goes to `sign_review`
+        (the § 29¹(4) case is identified by a person, not by this tool).
+      * Part A special code 03 covers an invoice with supply at two or more rates,
+        "incl. negative supply" (instructions, part A column 10; EMTA part A example:
+        1500 = 24 % 2000 and 9 % −500, two rows, column 6 = 1500 on both). Given
+        `line_nets`, an ordinary invoice (side A) whose own net, VAT and total are
+        positive and whose negative lines are whole rate groups is declared, counted at
+        its net total, and returned with `rate_rows` and `special_codes: ["03"]` (only
+        general-procedure lines: a line marked `special_procedure` keeps it with a
+        person). Every other shown invoice whose lines carry both signs — a negative
+        line at a single rate or at 0 %/exempt, a total of zero or below, a credit memo,
+        any part B invoice — goes to `sign_review`, as does an ordinary purchase invoice
+        with a negative total. These two checks run after the exclusions (an invoice
+        that is not shown is not sent for review by them); the header sign check above
+        still runs first.
       * An invoice counts into the limit only once, in the first period it must be
         presented. An invoice already presented in an earlier period whose supply (part A)
         or deduction (part B) also falls in this period must be presented again
@@ -657,7 +885,15 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     invoices negative; a missing, null or non-numeric value is refused, never read as
     0), vat_amount, has_positive_rate_supply (bool, required),
     travel_special_procedure_only, professional_secrecy, counted_in_earlier_period,
-    and for side B vat_deducted_in_period (REQUIRED on side B; 0 means not deducted).
+    and for side B vat_deducted_in_period (REQUIRED on side B; 0 means not deducted)
+    and cross_border_reverse_charge (bool, side B only; then vat_amount and
+    reverse_charge_vat_amount are required) and import_reverse_charge (bool, side B only:
+    a reverse-charge line on a code with tax_scope "import"; the invoice goes to
+    `reverse_charge_review`, as does a cross-border bill with a special_procedure line). line_nets (list of {rate, net_amount}, see
+    _line_nets) must add up to the invoice's net (a credit memo's turned back to the
+    document's sign) within a cent per line, or the whole selection is refused; invoices
+    passed without it are listed under `lines_not_checked`, because negative lines cannot
+    be seen without it.
     Optional gross_amount (the document total incl. VAT, i.e. the header amount) with
     reverse_charge_vat_amount (VAT self-assessed on reverse charge, not in that total):
     when gross_amount is given (vat_amount is then required), net_amount + vat_amount -
@@ -683,8 +919,10 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     another company's record. An invoice whose amounts do not all carry one sign (see
     sign_inconsistency) is neither declared nor counted toward the limit; it is returned
     under `sign_review` with its figures. Returns {"declare", "needs_registry_code",
-    "below_threshold", "excluded", "sign_review", "gross_reviewed",
-    "gross_not_checked"}.
+    "below_threshold", "excluded", "sign_review", "reverse_charge_review",
+    "rate_review", "gross_reviewed", "gross_not_checked", "lines_not_checked"}. A line
+    rate is canonicalised ("24.00" -> "24"); an invoice with a positive line rate outside
+    24/22/20/13/9/5 goes to `rate_review` for a person.
     """
     if side not in ("A", "B"):
         raise ValueError("side must be 'A' (invoices issued) or 'B' (invoices received)")
@@ -697,6 +935,10 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     gross_reviewed: List[dict] = []
     gross_not_checked: List[str] = []
     sign_review: List[dict] = []
+    reverse_charge_review: List[dict] = []
+    rate_review: List[dict] = []
+    lines_not_checked: List[str] = []
+    line_mismatches: List[str] = []
     for inv in invoices:
         if not isinstance(inv, dict):
             raise ValueError("each invoice must be a JSON object")
@@ -743,22 +985,81 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
                                    "difference": mismatch, "reason": reviewed})
         elif mismatch:
             gross_mismatches.append(mismatch)
-        mixed = sign_inconsistency(inv, net, label, INF_DOCUMENT_TYPES[side][doc_type])
-        if mixed:
+        credit_doc = INF_DOCUMENT_TYPES[side][doc_type]
+        lines = _line_nets(inv, label)
+        if lines is None:
+            lines_not_checked.append(str(inv.get("invoice_number") or f"partner {key}"))
+        cross_border = bool(inv.get("cross_border_reverse_charge"))
+        import_rc = bool(inv.get("import_reverse_charge"))
+        if (cross_border or import_rc) and side != "B":
+            raise ValueError(f"{label}: cross_border_reverse_charge / import_reverse_charge "
+                             "apply to invoices received (side B) only")
+        vat_deducted = (required_amount(inv, "vat_deducted_in_period", label)
+                        if side == "B" else None)
+
+        # Who decides how the invoice is shown: the annex text, or a person.
+        review = sign_inconsistency(inv, net, label, credit_doc)
+        odd_rates = sorted({r for r, _v, _sp in (lines or [])
+                            if r is not None and r not in ANNEX_LINE_RATES})
+        if review is None and odd_rates:
+            rate_review.append({
+                "partner_key": key, "invoice_number": inv.get("invoice_number"),
+                "document_type": doc_type, "rates": odd_rates,
+                "reason": (f"line rate(s) {', '.join(odd_rates)} % are not among the rates "
+                           f"the annex covers ({', '.join(ANNEX_LINE_RATES)} %): how this "
+                           "invoice is classified is for a person to decide")})
+            continue
+        if review:
             sign_review.append({
                 "partner_key": key, "invoice_number": inv.get("invoice_number"),
                 "document_type": doc_type, "net_amount": inv.get("net_amount"),
                 "vat_amount": inv.get("vat_amount"), "gross_amount": inv.get("gross_amount"),
-                "reason": mixed})
+                "vat_deducted_in_period": inv.get("vat_deducted_in_period"),
+                "reason": review})
             continue
-        if INF_DOCUMENT_TYPES[side][doc_type]:
+        # The line tie runs only for an invoice the header sign check lets through: one
+        # already going to a person (e.g. a credit memo passed with a positive net) must
+        # not stop the whole selection.
+        if lines is not None:
+            off = line_nets_mismatch(lines, -net if credit_doc else net, label)
+            if off:
+                line_mismatches.append(off)
+        if credit_doc:
             net = -abs(net) or Decimal("0.00")   # a zero net stays "0.00", never "-0.00"
-        vat_deducted = (required_amount(inv, "vat_deducted_in_period", label)
-                        if side == "B" else None)
+        # Reviewed before the exclusions below: an import or mixed reverse-charge bill
+        # that would also be excluded (e.g. VAT not deducted) still goes to a person.
+        rc_review = None
+        if import_rc:
+            rc_review = ("reverse charge on a code with tax_scope 'import': the cross-border "
+                         "rule (EMTA annex page) names intra-Community acquisitions and "
+                         "services from abroad; whether this bill is shown is for a person "
+                         "to decide")
+        elif cross_border:
+            vat = required_amount(inv, "vat_amount", label)
+            rc_vat = required_amount(inv, "reverse_charge_vat_amount", label)
+            if abs(vat - rc_vat) > INF_GROSS_TOLERANCE:
+                rc_review = ("cross-border reverse charge on an invoice that also carries "
+                             "VAT charged by the supplier: whether and how it is shown in "
+                             "part B is for a person to decide")
+            elif lines and any(special for _r, _v, special in lines):
+                rc_review = ("cross-border reverse charge together with a special-procedure "
+                             "(§ 41/§ 42/§ 41¹) line: § 41¹ is shown in part B, cross-border reverse "
+                             "charge is not; how this bill is shown is for a person to decide")
+        if rc_review:
+            reverse_charge_review.append({
+                "partner_key": key, "invoice_number": inv.get("invoice_number"),
+                "vat_amount": inv.get("vat_amount"),
+                "reverse_charge_vat_amount": inv.get("reverse_charge_vat_amount"),
+                "reason": rc_review})
+            continue
         reason = None
         reg_code = str(inv.get("registry_code") or "").strip()
         verified = bool(inv.get("registry_code_verified")) and bool(reg_code)
-        if not inv["has_positive_rate_supply"]:
+        if cross_border:
+            reason = ("invoice for a cross-border transaction reverse-charged in Estonia "
+                      "(intra-Community acquisition or service from abroad): not shown in "
+                      "KMD INF")
+        elif not inv["has_positive_rate_supply"]:
             reason = "no supply at 24/22/20/13/9/5 % on the invoice"
         elif inv.get("travel_special_procedure_only"):
             reason = "issued solely under the travel-services special procedure (VAT Act § 40)"
@@ -775,11 +1076,42 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
                              "reason": reason})
             continue
 
+        # Checked only for invoices that would be shown: lines of both signs, and a minus
+        # sign on an ordinary purchase invoice.
+        review = None
+        rate_rows = None
+        if lines and any(v < 0 for _r, v, _sp in lines) and any(v > 0 for _r, v, _sp in lines):
+            if side == "A" and not credit_doc and net > 0:
+                vat = (required_amount(inv, "vat_amount", label)
+                       if inv.get("vat_amount") not in (None, "") else None)
+                rate_rows, review = mixed_rate_rows(lines, vat)
+            else:
+                review = negative_line_reason(side, credit_doc)
+        if review is None and side == "B" and not credit_doc and (vat_deducted < 0 or net < 0):
+            review = (f"ordinary purchase invoice with a minus sign (net {net:.2f}, input VAT "
+                      f"deducted {vat_deducted:.2f}): part B takes a minus sign only on a credit "
+                      "invoice or on an invoice unpaid under VAT Act § 29¹(4) (bad debt, "
+                      "original invoice number); which case this is, and how it is shown, is "
+                      "for a person to decide")
+        if review:
+            sign_review.append({
+                "partner_key": key, "invoice_number": inv.get("invoice_number"),
+                "document_type": doc_type, "net_amount": inv.get("net_amount"),
+                "vat_amount": inv.get("vat_amount"), "gross_amount": inv.get("gross_amount"),
+                "vat_deducted_in_period": inv.get("vat_deducted_in_period"),
+                "reason": review})
+            continue
+
         # Returned with the invoice: the signed EUR net to put in the annex (credit
         # invoices are entered with a minus sign, KMD INF instructions parts A and B).
         # Only rows whose amounts carry one sign reach here (sign_inconsistency), so a
         # negative net means the whole invoice is negative: a credit.
         signed = dict(inv, signed_net_amount=f"{net:.2f}")
+        if rate_rows is not None:
+            # Declared under special code 03: one part A row per rate, the invoice's net
+            # (column 6) repeated on each, the rate's signed net for column 9.
+            signed["rate_rows"] = rate_rows
+            signed["special_codes"] = [MIXED_RATE_SPECIAL_CODE]
         is_credit = INF_DOCUMENT_TYPES[side][doc_type] or net < 0
         for src, dst in (("vat_amount", "signed_vat_amount"),
                          ("vat_deducted_in_period", "signed_vat_deducted_in_period")):
@@ -788,6 +1120,12 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
                 signed[dst] = f"{((-abs(value) or Decimal('0.00')) if is_credit else value):.2f}"
         included.append((key, reg_code, verified, net, signed))
 
+    if line_mismatches:
+        raise ValueError(
+            f"line_nets do not add up to the invoice's net on {len(line_mismatches)} "
+            "invoice(s); fix the extraction before selecting:\n  "
+            + "\n  ".join(line_mismatches)
+        )
     if gross_mismatches:
         raise ValueError(
             "net plus VAT does not equal the document total on "
@@ -883,7 +1221,9 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
             declare.append(row)
     return {"declare": declare, "needs_registry_code": needs_code,
             "below_threshold": below, "excluded": excluded, "sign_review": sign_review,
-            "gross_reviewed": gross_reviewed, "gross_not_checked": gross_not_checked}
+            "reverse_charge_review": reverse_charge_review, "rate_review": rate_review,
+            "gross_reviewed": gross_reviewed, "gross_not_checked": gross_not_checked,
+            "lines_not_checked": lines_not_checked}
 
 
 # --------------------------------------------------------------------------- #
@@ -1313,7 +1653,7 @@ def main() -> None:
     else:
         print("  Net VAT: EUR 0.00")
 
-    for warning in reverse_charge_warnings(data):
+    for warning in reverse_charge_warnings(data) + domestic_reverse_charge_warnings(data):
         print(f"\nNOTE: {warning}")
 
     print("\nUpload the CSV at maasikas.emta.ee (or the XML). Deadline: 20th of next month.")

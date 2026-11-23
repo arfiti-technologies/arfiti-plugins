@@ -49,7 +49,12 @@ Follow **skills/estonian-vat-declaration/SKILL.md**:
    equal `vat_report`'s taxable bases; and any AP invoice whose header carries `metadata.accrual_reversal` goes to a person. A
    mismatch stops the preparation with the documents that differ (SKILL Step 2). An
    invoice whose amounts do not carry one sign comes back under `sign_review` and goes to
-   a person; it is neither declared nor counted toward the limit.
+   a person; it is neither declared nor counted toward the limit. So do invoices whose
+   `line_nets` carry both signs (except a multi-rate sales invoice whose negative amounts
+   are whole rate groups, declared with code 03 per EMTA's part A example) and an
+   ordinary purchase invoice with a minus sign (negative deduction or negative total). Cross-border reverse-charge bills
+   (`cross_border_reverse_charge`) are not shown in KMD INF; with supplier VAT on the
+   same bill they go to `reverse_charge_review`.
    List supplier invoice numbers that already appear for the same supplier in a filed
    period (SKILL Step 2.5) for a person to review — never excluded automatically.
 3. Verify every `document` line has a valid tax code (a `control` line never has one).
@@ -83,7 +88,9 @@ Once the gate is green (no open BLOCK):
 - Select KMD INF partners with `scripts/generate_kmd.py --select-inf … --side A|B`
   (invoices **without VAT** at least EUR 1,000.00 per partner, inclusive) and build
   `sales_annex` / `purchases_annex` invoice by invoice. Partners without a verified
-  register code go to a person; never use the VAT number.
+  register code go to a person; never use the VAT number. A code-03 invoice gets one
+  line per `rate_rows` entry; a § 41¹ seller line carries code 02 with column 9 empty
+  (the generator warns otherwise), a § 41¹ buyer line code 12 (skill Step 5).
 
 Build the input JSON (see `scripts/input_schema_kmd.json` for the full example):
 

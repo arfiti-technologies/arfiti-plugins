@@ -125,6 +125,11 @@ is worth the whole document total and must never be added.
   their reason in `gross_mismatch_reviewed` and is reported under `gross_reviewed`). A
   non-empty `gross_not_checked` is itself a **BLOCK**: the check did not run on those
   invoices.
+- **Line tie** — every invoice carries `line_nets` (each `document` line's net and
+  rate, SKILL Step 2). The selector refuses the selection when they do not add up to
+  the invoice's net (a cent per line allowed). A non-empty `lines_not_checked` is a
+  **BLOCK**: the selector declared those invoices as one ordinary row without seeing a
+  second rate or a negative line.
 - **Canonical tie** — over every document of an `ap`-category type (input) and
   `ar`-category type (output) inside the VAT registration (`registration_type` `vat`;
   `effective_to` from `get_entity("tax_registration", id=…)`; by the document's date, a
@@ -148,15 +153,45 @@ is worth the whole document total and must never be added.
   must be presented) and its other invoices under `below_threshold` (they are not).
   (`generate_kmd.py` derives the flags from the annex lines, so the gate's job is to
   confirm the annex lines match the selection.)
-- Any invoice in `sign_review` (amounts of mixed sign: an edited bill with a negative net
-  and a positive total, a credit memo with a negative line) — **BLOCK** until a person
-  decides how it is presented; it was neither declared nor counted toward the limit.
+- Any invoice in `sign_review` — **BLOCK** until a person decides how it is presented;
+  it was neither declared nor counted toward the limit. It holds: amounts of mixed sign
+  (an edited bill with a negative net and a positive total, a credit memo whose lines
+  sum below zero); lines of both signs that EMTA's text does not settle (a negative line
+  at a single rate or at 0 %/exempt, a negative total, a credit memo, any part B
+  invoice); and an ordinary purchase invoice with a minus sign (negative
+  `vat_deducted_in_period` or negative total) (part B takes a minus sign only on a credit invoice or an invoice unpaid under VAT Act
+  § 29¹(4); a person decides which, the tool cannot). A multi-rate sales invoice whose
+  negative amounts are whole rate groups is **not** here: EMTA settles it (code 03, one
+  row per rate, signed column 9, column 6 repeated; part A example 1500 = 24 % 2000 and
+  9 % −500) and the selector declares it with `rate_rows`.
+- Any invoice in `reverse_charge_review` (cross-border reverse charge on a bill that
+  also carries supplier VAT) — **BLOCK** until a person decides. Plain cross-border
+  reverse-charge bills (intra-Community acquisitions, services from abroad) are
+  `excluded`: KMD INF does not show them (EMTA annex page, see `kmd-inf-annex.md`).
+- Any invoice in `rate_review` (a line rate outside 24/22/20/13/9/5, e.g. an
+  organisation's own code) — **BLOCK** until a person decides how it is classified; it
+  was neither declared nor counted toward the limit.
+- Any sales invoice with a line on a § 41¹ code whose `default_rate` is 0 or empty
+  (SKILL Step 2) — **BLOCK**. It is kept out of the selector, so the partner totals
+  exclude it and it can neither bring the partner over EUR 1,000 nor be declared. A
+  person decides the rate for column 7 and whether it counts toward the limit before
+  filing.
+- Any part B bill with a reverse-charge code whose `tax_scope` is `import` — **BLOCK**
+  until a person decides: the cross-border rule above does not cover it. Passed with
+  `import_reverse_charge: true`, the selector lists it under `reverse_charge_review`.
+- A part A line with special code 02 (§ 41¹ seller) and column 9 filled — **WARN**
+  (`generate_kmd.py` prints a note): a pure § 41¹ row leaves column 9 empty and the
+  supply goes to KMD line 9; only general-procedure supply on the same invoice may sit
+  there, and a person confirms it. A part B § 41¹ line
+  carries code 12 and column 6 = the invoice total with VAT as shown on the invoice.
 - Any partner in `needs_registry_code` — **BLOCK** until a person supplies a verified
   register code or confirms the partner is a non-resident without one. Never fill it
   from a VAT number.
 - Reversed and voided documents of the period (SKILL Step 2, item 3) — **WARN**: list
-  them for a person to decide how they appear in the annex. Their treatment in the KMD
-  INF is not settled by this gate.
+  them for a person to decide how they appear in the annex. Not settled by the
+  official text: a later-period cancellation without a credit-invoice document, an
+  invoice issued and voided in the same period, an invoice voided by mistake (original
+  period or current period).
 - Any `include_lines` response with the "Line items truncated" warning — **BLOCK** until
   the lines are re-read; a truncated invoice has a net that is too low.
 - `vatSum` / `invoiceSumForRate` present while the entity is not on cash accounting —

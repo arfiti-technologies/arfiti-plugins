@@ -215,7 +215,29 @@ drop the original because it was later reversed.
    - `gross_amount` = the header `amount` (the document total the supplier is owed or
      the customer owes);
    - `has_positive_rate_supply` = any line whose tax code's `default_rate` is 24, 22,
-     20, 13, 9 or 5.
+     20, 13, 9 or 5. A **sales** line on a § 41¹ code (`is_reverse_charge: true`,
+     `tax_scope: "domestic"`) is declared by EMTA with the rate in column 7 (part A
+     example: 24 %, code 02). If that code's `default_rate` is one of those rates, use
+     it; if it is 0 or empty, the rate cannot be read from the code: keep the invoice
+     out of the selector and list it for the person (never assume 24);
+   - `line_nets` = one `{"rate": …, "net_amount": …}` per line, always: `rate` is the
+     line's tax code `default_rate` as returned ("24", "24.00" and 24 are all read as
+     24) when it is above zero, `null` for a 0 %, exempt or untaxed line (never "0":
+     the selector refuses a zero rate). A rate other than 24/22/20/13/9/5 (an
+     organisation's own code) sends that invoice to `rate_review` for the person; `net_amount` is the
+     line net in the document's own sign (a credit memo's lines as stored, positive);
+     add `"special_procedure": true` to a line under VAT Act § 41/§ 42 or a § 41¹
+     domestic reverse-charge code (such an invoice is never declared under the code-03
+     case below; it goes to a person when its lines carry both signs);
+   - part B only: `cross_border_reverse_charge` = any line whose tax code has
+     `is_reverse_charge: true` and `tax_scope` `intra_union_goods`,
+     `intra_union_services` or `foreign_reverse_charge` (from the tax code list above;
+     a reverse-charge code without `tax_scope` uses the classification the person
+     confirmed in Step 1). Never infer it from the supplier's country. A § 41¹ code
+     (`tax_scope: "domestic"`) is not cross-border;
+   - part B only: `import_reverse_charge` = any line whose tax code has
+     `is_reverse_charge: true` and `tax_scope: "import"` (not covered by the
+     cross-border rule; the selector sends the bill to a person).
    Convert all amounts to EUR as above.
 
    **Two ties before any figure is used** (each mismatch stops the preparation; present
@@ -287,9 +309,14 @@ drop the original because it was later reversed.
    against the reversed invoice. A voided document was never posted (only an unposted
    document can be voided), so it was never in the ledger figures; it is listed only so
    the person sees what was withdrawn.
-   How a reversed or voided invoice is shown in the KMD INF is not settled here. List
-   them separately for a person to decide, and do not add or remove annex lines for
-   them on your own:
+   How a reversed or voided invoice is shown in the KMD INF is not settled here. What
+   the sources do settle: a cancellation after the return was filed is reflected in the
+   period of the cancellation, like a credit invoice (VAT Act § 29(7)), and an invoice
+   declared by mistake is re-entered with zero amounts (KMD INF instructions,
+   "Correcting the KMD INF form"). Not settled: a later-period cancellation without a
+   credit-invoice document, an invoice issued and voided in the same period, and an
+   invoice voided by mistake (original period or current period). List them separately
+   for a person to decide, and do not add or remove annex lines for them on your own:
    ```
    query("transaction", filters={"legal_entity_id": ID,
        "transaction_type": ["AR_INVOICE", "AR_CREDIT_MEMO", "AP_INVOICE", "AP_CREDIT_MEMO"],
@@ -422,8 +449,8 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
 1. **Build the invoice lists** from Step 2's per-invoice figures — `document` lines
    only, never the `control` row: per invoice the `document_type`, `net_amount` (the
    total **without VAT in EUR**), `vat_amount`, `reverse_charge_vat_amount`,
-   `gross_amount` (header `amount`, in EUR), `has_positive_rate_supply`, with
-   `currency: "EUR"`, the partner (`partner_key` = the `customer_id` or `vendor_id`) and
+   `gross_amount` (header `amount`, in EUR), `has_positive_rate_supply`, `line_nets`,
+   for part B `cross_border_reverse_charge`, with `currency: "EUR"`, the partner (`partner_key` = the `customer_id` or `vendor_id`) and
    its register code. Always pass `gross_amount`: the selector then refuses any invoice
    whose net plus VAT is not its total, which is how a net that counted the control row
    is caught. Part A uses invoices issued; part B uses invoices received whose VAT
@@ -439,7 +466,25 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
    with a negative net and a positive total, a credit memo with a negative line, a
    credit memo whose `net_amount` is above zero) is neither declared nor counted: it is
    returned under `sign_review` with its figures for a person
-   (references/kmd-inf-annex.md). It refuses non-EUR amounts and a missing document type:
+   (references/kmd-inf-annex.md). So is an invoice whose `line_nets` carry both signs,
+   except the case EMTA settles: an ordinary sales invoice with positive totals and
+   supply at two or more rates where each negative amount is a whole rate group (EMTA
+   example: 1500 = 24 % 2000 and 9 % −500). That one is declared, counted at its total
+   without VAT, and returned with `rate_rows` and `special_codes: ["03"]`. A part B
+   invoice that is not a credit memo but carries a minus sign (negative net or negative
+   `vat_deducted_in_period`) also goes to `sign_review` (part B takes a minus sign only on a credit invoice or an invoice
+   unpaid under VAT Act § 29¹(4); a person decides which). A cross-border
+   reverse-charge bill (intra-Community acquisition, service from abroad) is
+   `excluded`: KMD INF does not show it (EMTA annex page); with supplier VAT on the
+   same bill, or with a § 41¹ line (`special_procedure`), it goes to
+   `reverse_charge_review`, as does an `import_reverse_charge` bill. An invoice with a
+   line rate outside 24/22/20/13/9/5 goes to `rate_review`. A code-03
+   candidate whose VAT does not equal Σ rate-group net × rate goes to `sign_review`.
+   `lines_not_checked` and `gross_not_checked` must be empty: pass `line_nets` for
+   **every** invoice. The selector cannot tell whether an invoice passed without them
+   has more than one rate or a negative line; it declares it as one ordinary row and
+   only lists it, so do not file while that list has entries. It refuses non-EUR amounts and a missing
+   document type:
    ```
    python3 scripts/generate_kmd.py --select-inf invoices_A.json --side A
    python3 scripts/generate_kmd.py --select-inf invoices_B.json --side B
@@ -459,6 +504,23 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
    annex line per rate group, up to 4 per invoice); `vatInPeriod` from
    `signed_vat_deducted_in_period`; `invoiceSumVat` = `signed_net_amount` +
    `signed_vat_amount`. Never the unsigned `net_amount` for a credit invoice.
+   - **Code 03 invoice** (returned with `rate_rows`): one line per `rate_rows` entry,
+     `invoiceSum` = `signed_net_amount` on every line, `taxRate` = its `tax_rate`,
+     `sumForRateInPeriod` = its `net_amount` (signed: −500 stays −500) when the whole
+     supply falls in this period, `comments` = "03". For other invoices with supply at
+     two or more rates or with 0 %/exempt parts the sources conflict: the instructions
+     (part A column 10) give code 03, but EMTA's first part A example (1500 = 24 % 500
+     + 9 % 1000, two rows) shows no code. Put the case to the person; do not choose.
+   - **§ 41¹ seller** (domestic reverse-charge code on a sales line): `invoiceSum` = the
+     total without VAT, `taxRate` = the rate, `sumForRateInPeriod` **empty**, `comments`
+     = "02" (the supply goes to KMD line 9, `supplySpecialArrangements`). The generator
+     warns about a code-02 line with column 9 filled: general-procedure 24 % supply on
+     the same invoice shares the row (instructions, part A), and how that row is filled
+     is for the person.
+   - **§ 41¹ buyer**: `invoiceSumVat` = net + VAT as shown on the invoice (the VAT the
+     buyer accounts for included; not the header `amount`), `vatInPeriod` = the VAT
+     deducted, `comments` = "12". If the seller's invoice shows no VAT amount, list it
+     for a person (column 6 is not settled for that case).
    - Part A: `buyerRegCode`, `buyerName`, `invoiceNumber`, `invoiceDate`, `invoiceSum`
      (total without VAT), `taxRate`, `sumForRateInPeriod`, special code in `comments`.
    - Part B: `sellerRegCode`, `sellerName`, `invoiceNumber` (supplier's number),
@@ -474,8 +536,10 @@ When no partner reaches the threshold, omit the annex — the generator sets
 
 **CP4 checkpoint**: Part A column 9 per rate ≤ the KMD rate lines, part B column 8 ≤
 `inputVatTotal`; explain the difference by cause (partners below the threshold, natural
-persons, excluded invoices, `sign_review`). Present the `needs_registry_code` and
-`sign_review` lists and stop for the person's answer before filing.
+persons, excluded invoices, `sign_review`, `reverse_charge_review`). Present the
+`needs_registry_code`, `sign_review` and `reverse_charge_review` lists, and the
+reversed / voided documents from Step 2, and stop for the person's answer before
+filing.
 
 ### Step 6: Prepare EC Sales List (Form VD)
 
