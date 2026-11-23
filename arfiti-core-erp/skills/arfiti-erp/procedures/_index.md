@@ -8,6 +8,7 @@ practice: keep it in a skill of its own beside the plugins.
 
 ### Onboarding
 - [Organization Onboarding](onboarding.md) - First-time org setup (MUST use for new organizations)
+- [Custom chart of accounts](onboarding.md#custom-chart-of-accounts) - The company keeps its own chart: import it, then posting profiles and tax accounts
 
 ### Support
 - [Support Tickets](support.md) - File bug reports, feature requests, check ticket status

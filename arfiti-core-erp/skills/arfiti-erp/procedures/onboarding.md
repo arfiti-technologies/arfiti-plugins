@@ -49,7 +49,8 @@ legitimate setup failure, inspect the checklist and retry only the failed task.
 3. **NEVER call `manage_onboarding(action="initialize_entity")` before `start`** — `initialize_entity` requires an existing `legal_entity_id` and will fail with a fiscal_periods FK error if the entity doesn't exist yet.
 4. **NEVER use `manage_onboarding(action="add_entity")`** for the first entity — that action is ONLY for adding a 2nd+ entity to an already-onboarded organization
 5. **Run waves while runnable tasks remain.** Completion requires every task to be completed or explicitly skipped. Failed tasks remain open: inspect the error, resolve it, use `update_task` to reset that task to `pending`, then retry; never reset populated company data to recover a failed task.
-6. The wave runner handles everything automatically: legal entity creation, chart of accounts, tax codes, posting profiles, agents, skills, plugins, payroll, dimensions, and more
+6. The wave runner creates the legal entity, the chart of accounts and posting profiles (from a template chart only), tax codes, number series, agents, payroll and dimension setup. It installs no plugins and cannot see which ones a client has: the person installs them (Step 6).
+7. **Never assume a material choice from silence.** `start` lists every one it was not given in `material_choices_not_provided`; ask those before the first wave.
 
 ---
 
@@ -66,15 +67,24 @@ get_onboarding(action="check_status")
 
 ### Step 2: Collect Company Details
 
-Ask the user for:
+Ask the user every row; each one changes accounting outcomes:
 
-| Field | Required | Example | Used by `start` |
-|-------|----------|---------|-----------------|
+| Field | Ask | Example | Used by `start` |
+|-------|-----|---------|-----------------|
 | Country | Yes | EE, US, GB, DE (2-letter ISO) | `country_code` |
-| Accounting standard | Yes | IFRS or US GAAP | `accounting_standard` |
+| Chart of accounts | Yes | IFRS template, US GAAP template, or their own chart | `accounting_standard` |
 | Tax jurisdiction | Yes | EU, US, UK | `tax_jurisdiction` |
-| Fiscal year start month | Optional (default: 1) | 1 = January, 4 = April | `fiscal_year_start_month` |
-| Is VAT registered? | Optional | true/false | `is_vat_registered` |
+| Fiscal year start month | Yes | 1 = January, 4 = April | `fiscal_year_start_month` |
+| Registered for VAT? | Yes (same as `add_entity`) | true/false, and the number | `is_vat_registered` (VAT only; a US sales-tax registration is recorded separately, see below) |
+| Reporting timezone | Yes | America/New_York | not a `start` parameter: set once the entity exists |
+| New business, or moving from another system? | Yes | "moving from QuickBooks" | not a `start` parameter: decides the migration offer in Step 6 (do not ask it again there) |
+
+**Moving from another system, or keeping a chart they already have?** Offer `accounting_standard="custom"` before calling `start`, and say why: a template chart, once created, is shared master data that an import adds to but does not replace, so their own chart could not take its place later. See [Custom chart of accounts](#custom-chart-of-accounts).
+
+`start` applies a default for anything omitted so the checklist can be saved, and lists it in `material_choices_not_provided` (omitted is "not provided"; `is_vat_registered=false` is an answer). Ask each listed choice, then, before running any wave, call `start` again with the same arguments plus the answers: that replaces the saved choices. Once the waves have created the entity, `start` without `legal_entity_id` is refused (`onboarding_already_started`): continue with `run_wave`, and change a choice through the operations (for example `tax_registration`, `legal_entity.update`). A VAT answer of yes creates a `vat` registration row with number `PENDING` when the waves create the legal entity (not for an existing `legal_entity_id`); with no answer none is created. Record the real number with `submit(object_type="tax_registration", operation="update", ...)`; the type cannot be changed, so a wrong one is deleted (`tax_registration.delete`) and created again. For an existing entity, or a US sales-tax registration (answer `is_vat_registered=false`), create it: `submit(object_type="tax_registration", operation="create", ...)` with `registration_type` `sales_tax` (fields: `get_submissions(action="schema", object_type="tax_registration", operation="create")`). The `create_legal_entity` result shows `is_vat_registered: null` with `vat_registration: not provided…` when nobody answered, and `false` only for an answer of no.
+
+**Reporting timezone.** When the waves create the legal entity (`create_legal_entity` completed), it gets a default zone marked for review: the organisation's zone if set, else a listed country's zone, else `UTC` (any country not listed, the US included, gets `UTC`). Ask the person which zone their books use; do not just confirm the default. Then set it:
+`submit(object_type="legal_entity", operation="update", data='{"legal_entity_id": 12, "reporting_timezone": "America/New_York"}')`. Until then reports carry `REPORTING_TIMEZONE_DEFAULTED`.
 
 **Note on entity name/code/currency:** Wave 1 auto-derives these from the organization record and country_code. Entity name = org name, entity_code = country_code, currency = country-derived (EE→EUR, US→USD, GB→GBP). Collect these from the user only for confirmation/context — they are NOT passed to `start`.
 
@@ -88,7 +98,7 @@ manage_onboarding(action="start",
     accounting_standard="ifrs_standard",
     tax_jurisdiction="eu_vat",
     fiscal_year_start_month=1,
-    is_vat_registered=true   # optional
+    is_vat_registered=true
 )
 ```
 
@@ -99,9 +109,10 @@ manage_onboarding(action="start",
 - United States → `us_sales_tax`
 - United Kingdom → `uk_vat`
 
-**Accounting standard values:**
-- IFRS → `ifrs_standard` (also accepts UI value `IFRS`)
-- US GAAP → `us_gaap_standard` (also accepts UI value `GAAP`)
+**Accounting standard values** (any other value is refused and nothing is saved):
+- `us_gaap_standard` (also `GAAP`): loads the US GAAP chart and its posting profiles.
+- `ifrs_standard` (also `IFRS`, `LOCAL`): loads the IFRS chart and its posting profiles.
+- `custom` (also `CUSTOM`): the person's own chart. No chart and no posting profiles are created; follow [Custom chart of accounts](#custom-chart-of-accounts). Offer it whenever the person already has a chart they want to keep.
 
 **What Wave 1 uses for the legal entity (no way to override today):**
 - `entity_name` ← `organizations.name` (the name collected during org signup)
@@ -144,13 +155,17 @@ Should return `needs_onboarding: false` with complete `setup_info` including:
 ### Step 6: Inform User About Next Steps
 
 Tell the user:
-1. ✅ Organization is fully set up — list what got provisioned (COA count, fiscal periods, tax codes, agents seeded)
+1. What was set up and what was not, from the completion response's `setup_counts` and `not_set_up`. When `ready_to_post` is false (always for a custom chart until it is imported), say the books cannot post yet and why. Never list something with zero records as set up.
 2. **Agent email addresses** — list ONLY the emails with autonomous agent processing:
    - `bills.{entity}.{org-slug}@mail.arfiti.com` → bill_processor (forward vendor bills here)
    - `receipts.{entity}.{org-slug}@mail.arfiti.com` → expense_processor (forward expense receipts here)
 
    Do NOT list `invoices.*` or `payments.*` in the wrap-up. They exist in the DB but are manual/outbound utility addresses (invoices.* is for sending customer invoices; payments.* is a manual inbox for remittance advices). Listing them as "agent emails" confuses users because there is no agent behind them.
-3. **Suggested next steps** — choose from:
+3. **Offer, in this order, all optional** (none is needed to use the books):
+   1. **Plugins.** Name the ones that fit (`arfiti-core-erp` first; the country pack, or `arfiti-core-country-setup` where none exists; domain plugins the person asked about) and give the install steps from `setup_info.plugins`. The person installs them; ask them to confirm. You cannot see what their client has installed, so never say a plugin is installed.
+   2. **A project for this company**, where the client has projects, with `setup_info.claude_project_description` as its instructions. The project keeps the instructions and conversation files in the client; the books, documents and settings stay in Arfiti.
+   3. **New business or moving from another system?** (Asked in Step 2; ask now only if it was not answered.) For a migration, offer the `arfiti-core-implementation-consultant` plugin (`/start-migration`). It needs the old system's name, the cutoff date, a trial balance at the cutoff, open customer and vendor invoices, and the fixed asset register if there is one.
+4. **Other next steps** — choose from:
    - Import vendors, customers, and employees (via CSV or manual entry)
    - If migrating from a prior accounting system: import opening balances — see [Bulk Import: Opening Balance](../resources/bulk-import.md#opening-balance-import)
    - Set up payroll employees and compensation
@@ -159,6 +174,25 @@ Tell the user:
    Do NOT suggest:
    - ❌ "Download the skill from the admin dashboard" — there is no skill package to download. The guide to the tools is the `arfiti-core-erp` plugin, and the completion response's `setup_info.plugins` names the marketplace (`arfiti-technologies/arfiti-plugins`) to install it and the country plugins from. Say that once, from the completion response; do not invent a download link.
    - ❌ "Add bank accounts (bank connectors available)" — don't push connectors unprompted during onboarding. Revolut Business is the bank connectivity, and it is set up from the admin dashboard's connector wizard (certificate + consent), not from chat. Only mention it if the user explicitly asks about bank integrations.
+
+---
+
+## Custom chart of accounts
+
+For a company that keeps its own chart. Choose it **before** the waves: a template chart, once created, is shared master data that an import adds to but does not replace.
+
+1. **Get the chart from the person** (an export from their old system, a file, or a list). Never invent account numbers or names.
+2. **Start with `accounting_standard="custom"`** and run the waves. `create_coa` and `create_posting_profiles` end `skipped` with `needs_configuration: true`; nothing was created for them.
+3. **Compare with what exists.** Other onboarding tasks seed a few accounts of their own (a US company gets payroll liability and expense accounts with template numbers). List them, `query("account", filters={"legal_entity_id": 12})`, and agree with the person how each one maps to their chart: an import skips an account number that already exists anywhere in the organisation (`on_duplicate="skip"`). Keep the seeded account under its number and use it in place of the person's equivalent, or rename it with `submit(object_type="account", operation="update", data=...)`; a per-entity number override does not free the number for the import.
+4. **Import the chart.** Fields: `get_onboarding(action="get_support", support_type="import_accounts")`. Required per account: `account_number`, `account_name`, `account_type` (`asset`, `liability`, `equity`, `revenue`, `cogs`, `expense`), `normal_balance` (`debit`/`credit`). Set `account_subtype` on every account: reports, cash flow and the control-account checks read it. Dry run first, then import:
+   `manage_imports(action="accounts", legal_entity_id=12, records=[...], validate_only=true)`, then the same call without `validate_only`. More than 50 records are processed asynchronously; follow the import with `get_imports(action="status", import_id=...)`.
+5. **Control accounts.** The receivables and payables accounts carry `account_subtype` `accounts_receivable` / `accounts_payable` and `allow_manual_entries=false`; bank accounts carry `bank`; VAT accounts `vat_payable` / `vat_recoverable` (US sales tax: `sales_tax_payable`). Set these in the import records, or fix one with `submit(object_type="account", operation="update", data=...)`.
+6. **Posting profiles.** Create one per transaction type the company uses, with the person's account numbers: `submit(object_type="posting_profile", operation="create", data='{"legal_entity_id": 12, "profile_name": "Customer receivables", "profile_type": "customer", "debit_account_number": "...", "credit_account_number": "...", "is_default": true, "transaction_type_code": "AR_INVOICE"}')`. Check fields with `get_submissions(action="schema", object_type="posting_profile", operation="create")`. The profile types and transaction types are in [Posting Profiles](../resources/posting-profiles-management.md).
+7. **Tax accounts.** For each tax code: `submit(object_type="tax_code", operation="update", data='{"tax_code_id": ..., "sales_account_number": "...", "purchase_account_number": "..."}')`.
+8. **Defaults that point at accounts.** Check fixed asset categories and expense items' default expense accounts against the imported chart (`query("item", ...)`); onboarding seeded them for a template chart.
+9. **Verify.** Dry run a real first document the person has, `submit(object_type="transaction", operation="post", data=..., validate_only=true)`, then post it and read it back (`get_entity`). Then `generate_report(report_type="trial_balance", ...)`.
+
+**When something is missing**, the posting refuses with the account or profile it could not resolve; there is no fallback account. Create the missing account, profile or tax account through the operations above and retry. Do not skip or re-run onboarding tasks to get past it; `update_task` is for retrying a failed task, not for bypassing this procedure.
 
 ---
 
@@ -196,7 +230,7 @@ manage_onboarding(action="add_entity",
 )
 ```
 
-This reuses the org's existing chart of accounts, tax codes, agents, and posting profiles via MSEO. Only creates entity-specific items (fiscal periods, number series, emails, exchange rates, and an `entity_tax_registrations` row if `is_vat_registered=true`).
+This reuses the org's chart of accounts, tax codes and agents via MSEO and creates entity-specific items (fiscal periods, number series, emails, exchange rates, and an `entity_tax_registrations` row if `is_vat_registered=true`). It creates **no posting profiles**: they are kept per entity, so the new entity cannot post until they are created with `submit(object_type="posting_profile", operation="create", ...)` for its `legal_entity_id` (the answer's `not_set_up` says so).
 
 ### Step C: Updating a legal entity after creation
 
@@ -250,8 +284,8 @@ You called `initialize_entity` before the legal entity was created. Do NOT call 
 
 ---
 
-**Version**: 1.3
-**Last Updated**: 2026-04-24
+**Version**: 1.4
+**Last Updated**: 2026-11-23
 
 ### Recovery and verification
 
@@ -261,7 +295,7 @@ Check both `completed` and `skipped` counts. An empty migration task is skipped,
 
 ### After the final wave
 
-Use the completion response with the user’s preferred connected assistant. Install the plugins the response names (`setup_info.plugins`: add the marketplace `arfiti-technologies/arfiti-plugins`, install `arfiti-core-erp` first, then the country and domain plugins the organisation needs) and apply the project instructions through that client’s supported setup. Each plugin is installed separately; adding the marketplace installs none. An organisation that wants its own rules keeps a skill of its own beside the plugins: an update replaces edits made inside an installed plugin. Verify the chosen client connects to the intended organization; completed company setup does not certify that connection. Review any `needs_attention` items before relying on them.
+Make the three offers in Step 6 (plugins, project, migration question). Each plugin is installed separately; adding the marketplace installs none. An organisation that wants its own rules keeps a skill of its own beside the plugins: an update replaces edits made inside an installed plugin. Verify the chosen client connects to the intended organization; completed company setup does not certify that connection. Review any `needs_attention` items before relying on them.
 
 The Admin finish summary uses the label Assistant. Its external Claude link appears only when the recorded path is Claude; IDE or unknown paths finish at the dashboard. Do not treat the finish-screen link or label as proof of a working connection.
 

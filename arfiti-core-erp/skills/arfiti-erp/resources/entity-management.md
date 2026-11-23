@@ -236,7 +236,7 @@ The check uses the **transaction date** -- backdated entries respect historical 
 | `tax_id` | Tax / VAT number | Yes | "12-3456789" |
 | `register_id` | Business register / KMK code | Yes | "17266831" |
 | `entity_type` | Type classification | **No** | "subsidiary" |
-| `accounting_standard` | Accounting standard | **No** | "IFRS", "US_GAAP", "LOCAL" |
+| `accounting_standard` | Accounting standard | **No** | "GAAP", "IFRS", "LOCAL" |
 | `fiscal_year_start_month` | Month fiscal year begins (1-12) | **No** | 1 (January) |
 | `address_line_1` | Registered street address (mig 409) | Yes | "Rankestraße 8" |
 | `address_line_2` | Apt / suite / building (mig 409) | Yes | "Suite 200" |
