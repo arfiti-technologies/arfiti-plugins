@@ -76,7 +76,7 @@ Every `account_subtype` value must be one of 89 canonical codes seeded in `syste
 
 **Hierarchy and Organization:**
 - `parent_account_number` (string, max 50) - Parent account for hierarchical structure
-- `is_header` (boolean, default: false) - Header account (no posting allowed, subtotals only)
+- `is_header` (boolean, default: false) - Header account (no posting allowed, subtotals only). The ledger refuses any posted line on a header account, and on an account inactive for the entity (reversals and currency revaluations excepted), with "GL guard: … posts to header account …" / "… inactive for entity …": post to a detail account, or ask the user to fix the mapping or reactivate the account
 
 **Visibility and Control (unified MSEO contract):**
 `account.create` is `SCOPE_MODE='fanout'`. The combination of `is_global`, `legal_entity_id`, and `legal_entity_ids` resolves to a list of target entities — the executor writes a master row plus one `accounts` row per target entity.
