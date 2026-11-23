@@ -1564,12 +1564,10 @@ Revolut uses `metadata.purchase_occurred_at`, or the retained routed
 change posted dates, or use nearest-date guessing. Same-day twins remain ambiguous.
 The owner retries deterministic leftovers after applied matches remove competitors.
 
-Only when the organization has opted in (`purchase_investigation_enabled: true`;
-off by default), unresolved purchases with a vendor can enter a scoped reconciliation saga. It can
-page open bills and read raw metadata and persisted bill attachments. It prepares
-`review_purchase_settlement` tasks or requests missing evidence through
-`investigate_purchase`. A reply to an investigation task only resumes investigation;
-it does not authorize posting or settle a bill. Same-vendor settlement reviews may
+The optional purchase investigation saga (`reconciliation_evidence_v1`,
+`purchase_investigation_enabled`) is removed with the built-in reconciliation
+pipeline (P-AR-42, November 2026); existing investigation tasks and sagas stay
+readable as history and no longer take an answer. Same-vendor settlement reviews may
 cite a fingerprinted connector source plus a stored, hashed bill attachment.
 Cross-vendor reviews still require both sides' documents and explicit approval.
 

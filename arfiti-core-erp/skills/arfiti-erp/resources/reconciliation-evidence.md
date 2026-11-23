@@ -84,31 +84,11 @@ Revolut uses `metadata.purchase_occurred_at`, or the retained routed
 change posted dates, or use nearest-date guessing. Same-day twins remain ambiguous.
 The owner retries deterministic leftovers after applied matches remove competitors.
 
-Purchase investigations are optional: `purchase_investigation_enabled` defaults
-to false, including when omitted, and requires organization opt-in through an
-agent revision. Only boolean `true` enables queueing; strings, numbers and other
-values do not opt in. Disabling queueing does not cancel existing tasks or sagas. Normal
-matching remains available when a bill arrives; a missing bill alone does not
-require a chasing task. This setting does not add a period-close check.
-
-Deployment does not overwrite an existing agent revision that explicitly enables
-investigations. Since 11 November 2026 (AR-1187) startup sync
-(`AgentRegistry.seed_from_templates`) and entity onboarding create the
-reconciliation definition in an organization that has none switched off and
-marked `config.runtime = "managed"` (a managed agent runs it), with the file
-default (`false`). Existing versioned definitions are retained,
-and legacy definitions are captured with their effective configuration. A
-definition copied earlier from `system.agent_definition_templates` has no such
-key; the omitted-means-off rule covers those organizations. A saved configuration that
-omits the key was previously treated as on and is off after this release. Changing an existing organization's choice
-requires the supported revision/approval process. This code change does not itself
-activate a replacement template release.
-
-When enabled, unresolved purchases with a vendor can enter a scoped reconciliation saga. It can
-page open bills and read raw metadata and persisted bill attachments. It prepares
-`review_purchase_settlement` tasks or requests missing evidence through
-`investigate_purchase`. A reply to an investigation task only resumes investigation;
-it does not authorize posting or settle a bill. Same-vendor settlement reviews may
+Purchase investigations (`reconciliation_evidence_v1`, `purchase_investigation_enabled`)
+are removed with the built-in reconciliation pipeline (P-AR-42, November 2026).
+Existing investigation tasks and sagas stay readable as history and no longer take
+an answer; the reconciliation agent (now a managed agent) raises plain review tasks
+instead. Same-vendor settlement reviews may
 cite a fingerprinted connector source plus a stored, hashed bill attachment.
 Cross-vendor reviews still require both sides' documents and explicit approval.
 
