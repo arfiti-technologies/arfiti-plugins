@@ -295,6 +295,17 @@ Per-workflow notification configuration is stored in `system.workflow_notificati
 | `include_action_buttons` | Show approve/reject buttons in email |
 | `action_requires_login` | One-click action vs login required |
 
+### Muting emails: organisation switch and personal mutes
+
+To mute emails, use `submit(object_type="organization_notifications", operation="update", data='{"email_notifications_enabled": false}')` for the whole organisation (owner or admin) or `submit(object_type="notification_preferences", operation="update", data='{...}')` for the user's own; never edit workflow definitions for this.
+
+- Read first: `query("organization_notifications")` (the six organisation keys: `email_notifications_enabled`, `in_app_notifications_enabled`, `notify_on_submitted`, `notify_on_approved`, `notify_on_rejected`, `notify_on_escalated`) and `query("notification_preferences")` (the user's own: `email_notifications_enabled`, `notify_on_submitted`, `notify_on_approved`, `notify_on_rejected`, `notify_on_escalated`, `notify_agent_requests`).
+- Send only the keys to change, as JSON booleans; the others keep their values. Delivery needs both the organisation switch and the person's own switch on.
+- Only an owner or admin with every entity (and a key or session not limited to some entities) can change the organisation switch; nobody can change another person's mutes; agents cannot change or read either; a read-only key writes nothing.
+- They govern workflow and agent-request emails. Emails an agent sends itself (invoice delivery, receipt requests), invitations and billing alerts are not covered.
+- Repeating is safe: without an `idempotency_key` every call executes, so the user can switch back and forth.
+- Any member can change their own mutes, with a key or session allowed to write (a read-only member can do it in the dashboard).
+
 ### Notification Log
 
 All sent notifications are tracked in `system.notification_log`:

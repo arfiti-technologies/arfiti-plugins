@@ -297,6 +297,10 @@ Check both `completed` and `skipped` counts. An empty migration task is skipped,
 
 Make the three offers in Step 6 (plugins, project, migration question). Each plugin is installed separately; adding the marketplace installs none. An organisation that wants its own rules keeps a skill of its own beside the plugins: an update replaces edits made inside an installed plugin. Verify the chosen client connects to the intended organization; completed company setup does not certify that connection. Review any `needs_attention` items before relying on them.
 
+Terms are accepted only by a person in the dashboard: when the result's `terms.accepted` is false, tell the user this organisation has not accepted the Terms of Service and Privacy Policy yet and an owner or admin accepts them in the dashboard at `terms.accept_in_dashboard`; no tool accepts them.
+
+To mute emails, use `submit(object_type="organization_notifications", operation="update", data='{"email_notifications_enabled": false}')` for the whole organisation (owner or admin) or `submit(object_type="notification_preferences", operation="update", data='{...}')` for the user's own; never edit workflow definitions for this.
+
 The Admin finish summary uses the label Assistant. Its external Claude link appears only when the recorded path is Claude; IDE or unknown paths finish at the dashboard. Do not treat the finish-screen link or label as proof of a working connection.
 
 Connection-step copy/download indicators describe local browser actions only. Changed instructions, organization URLs or replaced keys/configurations need copying again. A failure clears the corresponding success indicator; it does not revoke or create a key, verify installation, or change onboarding status.
