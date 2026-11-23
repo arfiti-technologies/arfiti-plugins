@@ -490,10 +490,11 @@ posted, at pre-flight (`validate_only`) as at execution. Tax-inclusive lines add
 nothing; reverse-charge lines add nothing on a `transaction.update` (input and
 output offset). Never enter the tax line by hand as well as the code: that is
 refused as unbalanced. The refusal reads `Unbalanced entry: DR=…, CR=…` with the
-posted totals, exactly (no tolerance: the ledger guard has none for the document amounts). Journal posting refuses a tax-exclusive line with a
+posted totals, exactly (no tolerance: the ledger guard has none for the document amounts). Journal posting refuses a line with a
 reverse-charge code, or a code with `is_recoverable: false` on a purchase line,
-for a VAT-registered entity: it cannot book them correctly. Post such a purchase
-as an AP invoice, or enter the tax lines explicitly without the code.
+for a VAT-registered entity, whether tax-exclusive or tax-inclusive (AR-1435):
+it cannot book them correctly. Post such a purchase as an AP invoice, or enter
+the tax lines explicitly without the code.
 
 
 **Required Fields:**

@@ -1050,7 +1050,7 @@ CR  Reverse-charge output account   VAT        // same resolution as above
 - An entity that is not VAT registered on the document date cannot use a reverse-charge code: AP posting refuses it at validation and `transaction.update` refuses such a line when it rebuilds the lines.
 - A discount line or a credit memo reverses cost and output tax together. A code calculated by components posts one output row per non-zero component.
 - `vat_report` shows the output VAT and zero recoverable input for the line; `v_tax_lines` carries an `output` row and an `input` row with `is_recoverable = false`.
-- Journal-entry posting does not post a reverse-charge output side (recoverable or not); book reverse-charge purchases as AP invoices.
+- Journal-entry posting cannot post a reverse-charge output side, so for a VAT-registered entity it refuses a reverse-charge line (recoverable or not, tax-exclusive or tax-inclusive); book reverse-charge purchases as AP invoices.
 - Partial deduction (pro rata) is not modelled. Whether a purchase is deductible is the company's or its accountant's choice of tax code: ask, never assume.
 - Lines posted before AR-1413 was deployed put the VAT on the supplier payable and posted no output VAT. They are not rewritten, but a line edit through `transaction.update` (even a patch of one line's description) re-posts an unpaid, uncredited one in the new shape: `amount` and `amount_due` drop by the VAT and the output VAT row is added. Paid or credited bills refuse line edits.
 
@@ -1071,7 +1071,7 @@ The same decision books every purchase line on create and on edit (AP invoice, A
 - A negative line reverses cost, tax and payable together.
 - `vat_report` shows such tax as input paid with zero recoverable; `v_tax_lines` has an `input` row with `is_recoverable = false`.
 - Before AR-1415 an edit (`transaction.update` replacing the lines) booked an ordinary non-recoverable line as recoverable input VAT. An unpaid bill edited that way is corrected by its next line edit (even a patch of one description). Nothing is rewritten by itself; paid bills refuse line edits.
-- Journal-style `transaction.update`: the same decision on purchase-side lines (expense/cogs either side, or a debit to a non-revenue account); output tax on a revenue line or a balance-sheet credit is always posted. Journal posting refuses a tax-exclusive non-deductible or reverse-charge purchase line: book it as an AP invoice.
+- Journal-style `transaction.update`: the same decision on purchase-side lines (expense/cogs either side, or a debit to a non-revenue account); output tax on a revenue line or a balance-sheet credit is always posted. Journal posting refuses a non-deductible or reverse-charge purchase line, tax-exclusive or tax-inclusive: book it as an AP invoice.
 - Which codes are recoverable is the company's or its accountant's configuration on the tax code: ask, never assume.
 
 ## Which tax code a line gets
@@ -2218,7 +2218,8 @@ posted, at pre-flight (`validate_only`) as at execution. Tax-inclusive lines add
 nothing; reverse-charge lines add nothing on a `transaction.update` (input and
 output offset). Never enter the tax line by hand as well as the code: that is
 refused as unbalanced. The refusal reads `Unbalanced entry: DR=…, CR=…` with the
-posted totals, exactly (no tolerance: the ledger guard has none for the document amounts). Journal posting refuses a tax-exclusive line with a
+posted totals, exactly (no tolerance: the ledger guard has none for the document amounts). Journal posting refuses a line with a
 reverse-charge code, or a code with `is_recoverable: false` on a purchase line,
-for a VAT-registered entity: it cannot book them correctly. Post such a purchase
-as an AP invoice, or enter the tax lines explicitly without the code.
+for a VAT-registered entity, whether tax-exclusive or tax-inclusive (AR-1435):
+it cannot book them correctly. Post such a purchase as an AP invoice, or enter
+the tax lines explicitly without the code.
