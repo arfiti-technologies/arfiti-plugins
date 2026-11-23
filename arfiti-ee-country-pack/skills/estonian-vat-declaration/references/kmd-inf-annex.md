@@ -53,19 +53,65 @@ A partner below the threshold may still be declared voluntarily (VAT Act § 27(1
 
 Build an invoice list from the period's ledger-effective invoices — every status that
 carries the VAT, paid ones included (SKILL.md Step 2 fetches them with
-`include_lines=true`). Per invoice: the **net** total is the sum of the document
-lines' line net (`line_amount − tax_amount` when the line `is_tax_inclusive`, else `line_amount`) — the rule the canonical tax view uses, so a tax-inclusive line
-never pushes a partner over the limit on its gross amount — the VAT is the sum of
-`tax_amount`, and `has_positive_rate_supply` is true when any line carries a tax code at
+`include_lines=true`). **Use only the lines whose `line_role` is `document`.** The
+reads also return, for a native AP invoice or AP credit memo, the generated control
+line (`line_role: "control"`, the whole document total, no tax code); counting it turns
+a bill of net 1,000 into 2,240 and can push a partner over the limit. Per invoice, over
+its `document` lines (SKILL.md Step 2, "Per-invoice figures"): the **net** total is the
+sum of line net (`line_amount − tax_amount` when the line `is_tax_inclusive`, else
+`line_amount`) — the rule the canonical tax view uses, so a tax-inclusive line never
+pushes a partner over the limit on its gross amount — untaxed lines included; the VAT
+is the sum of `tax_amount`; `reverse_charge_vat_amount` is the sum of `tax_amount` on
+reverse-charge codes; `gross_amount` is the header `amount`; and
+`has_positive_rate_supply` is true when any line carries a tax code at
 24/22/20/13/9/5 %. Amounts are in **EUR**: for a foreign-currency document multiply
 the document amounts by the header's `exchange_rate` (document → functional rate) and
 round to cents per invoice; the limit and the annex are in euros, and `vat_report` sums
 the functional amounts (per line, so cents may differ). For a credit memo pass
-`net_amount` = −Σ|line net| — the canonical view (migration 601) makes each stored
-(positive) line negative — with its `document_type`; the selector counts any credit
+`net_amount` = −(Σ line net), the document's stored (positive) sum negated, with VAT,
+reverse-charge VAT and `gross_amount` as stored, and its `document_type`; the selector counts any credit
 memo as a credit and returns `signed_net_amount` (negative) for the annex columns,
-which take credit invoices with a minus sign. An ordinary invoice with a negative total (a reduction under VAT Act
-§ 29¹) carries a negative `net_amount` and also counts as a credit. Then run:
+which take credit invoices with a minus sign. An ordinary invoice whose net, VAT and
+total are all negative or zero (a reduction under VAT Act § 29¹) carries a negative
+`net_amount` and also counts as a credit.
+
+**Only an invoice whose amounts carry one sign is presented.** An ordinary invoice with
+net, VAT and total all ≥ 0, an ordinary invoice with all ≤ 0 (the credit above), or a
+credit memo with a `net_amount` ≤ 0 (negative, or zero for a VAT-only credit) and VAT
+and total ≥ 0 as stored. Anything else
+— an edited bill with a negative net and a positive total, a credit memo with a negative
+taxed line, a credit memo whose lines sum below zero (or whose `net_amount` was passed
+positive) — has no presentation in EMTA's instructions that this skill knows. The
+selector neither declares it nor counts it toward the limit; it returns it under
+`sign_review` with its figures, and a person decides.
+
+Before selecting, the checks in SKILL.md Step 2 must hold: per document, net + VAT −
+reverse-charge VAT = the header total (signed; a credit memo's net turned back to the
+document's sign); per direction, the documents' taxed nets = the
+taxable bases in `vat_report` (over every `ap` / `ar`-category document inside the
+VAT registration, not only invoices); and no AP invoice whose header carries `metadata.accrual_reversal` is used
+without a person's decision. The selector enforces the first one for every invoice that
+carries `gross_amount`, refusing the whole selection and listing each invoice that
+differs; an invoice a person has reviewed carries their reason in
+`gross_mismatch_reviewed` and is listed under `gross_reviewed`, and invoices passed
+without `gross_amount` are listed under `gross_not_checked`. Invoices of mixed sign are
+listed under `sign_review` (above).
+
+**What `line_role` can and cannot see.** A writer can record a line's role; until the
+writers do, the read works it out: on an AP or AR invoice, debit memo or credit memo, a
+line with no tax code posted to an account whose subtype is the document's control
+subtype (`accounts_payable` / `accounts_receivable`) is `control`, everything else
+`document`. Two consequences:
+
+- The reversal of an accrued expense for goods received earlier, which the AP invoice
+  writer adds to a bill as a line, reads as `document`. The writer also adds it to the
+  header total, so the gross tie passes, and it has no tax code, so `vat_report` never
+  sees it. The only sign is the header's `metadata.accrual_reversal` (returned by
+  `get_entity`, not by the list query); such an invoice goes to a person.
+- An untaxed business line posted to the control account itself reads as `control`.
+  It is then missing from the net, so the gross tie shows a difference of its amount.
+
+Then run:
 
 ```
 python3 scripts/generate_kmd.py --select-inf invoices_A.json --side A
@@ -78,7 +124,9 @@ Each invoice object: `partner_key` (the ERP `customer_id` / `vendor_id`),
 `registry_code`,
 `registry_code_verified`, `non_resident`, `partner_kind`, `invoice_number`,
 `invoice_date`, `net_amount` (required), `vat_amount`, `has_positive_rate_supply`
-(required, true/false), optional
+(required, true/false), `gross_amount` (the header `amount`; always pass it; it makes
+`vat_amount` required), `reverse_charge_vat_amount`, `gross_mismatch_reviewed` (only a
+person sets it), optional
 `travel_special_procedure_only`, `professional_secrecy`, `counted_in_earlier_period`,
 and for part B `vat_deducted_in_period` (required: the input VAT this invoice puts into
 KMD line 5 this period, `0` when none). Amounts are numbers with a dot decimal; a
@@ -87,8 +135,10 @@ transaction partner, not per ERP record: records that carry the same register co
 (two customer cards for one company) are combined into one partner, listed in
 `partner_keys` and `partner_names`. The group is declared only when every invoice in it
 carries the same verified code; a group that reaches the limit with an unverified or
-conflicting code goes to `needs_registry_code`. Records are never merged by name. The output lists `declare`, `needs_registry_code`, `below_threshold` and
-`excluded` (with the reason). Do **not** aggregate the header `amount` with
+conflicting code goes to `needs_registry_code`. Records are never merged by name. The output lists `declare`, `needs_registry_code`, `below_threshold`,
+`excluded` (with the reason), `sign_review` (mixed-sign invoices, with their figures),
+`gross_reviewed` (differences a person accepted, with the reason) and `gross_not_checked`
+(invoices passed without `gross_amount`). Do **not** aggregate the header `amount` for the limit with
 `query("transaction", group_by=..., aggregates={"amount": "sum"})`: that is the gross
 amount, and it mixes in invoices the instructions exclude.
 
@@ -143,10 +193,10 @@ The form is filled **invoice by invoice** (KMD INF instructions, parts A and B).
 | 3 | `buyerName` | Partner name | `customer.customer_name` |
 | 4 | `invoiceNumber` | Invoice number | `transaction_number` / invoice number on the document |
 | 5 | `invoiceDate` | Invoice date | `transaction_date` |
-| 6 | `invoiceSum` | Invoice total **without VAT**, incl. 0 %/exempt parts | Σ line net |
+| 6 | `invoiceSum` | Invoice total **without VAT**, incl. 0 %/exempt parts | Σ `document` line net |
 | 7 | `taxRate` | Rate classifier (`24`, `13`, `9`, `5`, special-procedure variants) | tax code |
 | 8 | `invoiceSumForRate` | Taxable value stated on the invoice — **cash-accounting taxpayers only** | only if `cash_accounting: true` |
-| 9 | `sumForRateInPeriod` | Part declared in KMD lines 1, 1¹, 1², 2, 2¹, 2² this period | Σ line net at that rate |
+| 9 | `sumForRateInPeriod` | Part declared in KMD lines 1, 1¹, 1², 2, 2¹, 2² this period | Σ `document` line net at that rate |
 | 10 | `comments` | Special code: 01 (§ 41/§ 42 special procedure), 02 (§ 41¹, buyer accounts the VAT), 03 (invoice also has 0 %/exempt/non-supply, or two or more rates) | tax codes |
 
 Part A is declared for the period in which the invoice's supply is incurred (VAT Act
@@ -166,7 +216,7 @@ sign. A § 41¹ seller leaves column 9 empty.
 | 3 | `sellerName` | Partner name | `vendor.vendor_name` |
 | 4 | `invoiceNumber` | Supplier's invoice number | `reference_number` |
 | 5 | `invoiceDate` | Invoice date | invoice date on the bill |
-| 6 | `invoiceSumVat` | Invoice total **with VAT** | Σ (line net + `tax_amount`) |
+| 6 | `invoiceSumVat` | Invoice total **with VAT** | Σ (`document` line net + `tax_amount`) |
 | 7 | `vatSum` | VAT stated on the invoice — **cash-accounting taxpayers only**; exceptionally the line-5 amount for a partial deduction (VAT Act § 32 / § 29(4)). The generator requires special code 11 on such a line: that is our derivation (code 11 is the instructions' code for exactly that deduction), not a sentence in the source | only if `cash_accounting: true` or code 11 |
 | 8 | `vatInPeriod` | Input VAT declared in KMD line 5 this period | deductible `tax_amount` |
 | 9 | `comments` | Special code: 11 (partial deduction, VAT Act § 32 / § 29(4)), 12 (§ 41¹ acquisition, buyer accounts the VAT) | tax codes |

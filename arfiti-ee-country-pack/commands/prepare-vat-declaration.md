@@ -40,9 +40,19 @@ Follow **skills/estonian-vat-declaration/SKILL.md**:
    documents. Convert foreign-currency amounts to EUR with the header `exchange_rate`,
    re-read any response warned "Line items truncated", and list reversed and voided
    documents for a person to decide (SKILL Step 2).
+   Build each invoice's figures from its `line_role: "document"` lines only — never the
+   generated `control` row an AP invoice returns among its lines (it is the whole
+   document total; counting it turns a 1,000 net bill into 2,240) — and pass the header
+   `amount` as `gross_amount`. Before using the figures: per document, net + VAT −
+   reverse-charge VAT must equal the header total, signed (the selector refuses otherwise); per
+   direction, the taxed nets of every ap / ar document inside the VAT registration must
+   equal `vat_report`'s taxable bases; and any AP invoice whose header carries `metadata.accrual_reversal` goes to a person. A
+   mismatch stops the preparation with the documents that differ (SKILL Step 2). An
+   invoice whose amounts do not carry one sign comes back under `sign_review` and goes to
+   a person; it is neither declared nor counted toward the limit.
    List supplier invoice numbers that already appear for the same supplier in a filed
    period (SKILL Step 2.5) for a person to review — never excluded automatically.
-3. Verify every line has a valid tax code.
+3. Verify every `document` line has a valid tax code (a `control` line never has one).
 
 ## Phase 2 — Pre-close validation gate (BLOCK / WARN)
 

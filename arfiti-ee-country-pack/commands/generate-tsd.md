@@ -467,7 +467,9 @@ xmllint --noout --schema /path/to/tsd_schema_eng_01.01.2023.xsd /path/to/TSD_YYY
 ```
 
 Also verify the settlement bill: `get_entity("transaction", <settlement_bill_id>)` —
-posted, vendor = the authority, lines sum to `c118_KohustKokku`, due the 10th of the
+posted, vendor = the authority, its `related.lines` with `line_role: "document"` sum
+to `c118_KohustKokku` (the bill's generated `control` line repeats the total and is
+not added), due the 10th of the
 following month, and `tax_return.return_data.settlement_bill_ids` points back at it.
 
 ## See also

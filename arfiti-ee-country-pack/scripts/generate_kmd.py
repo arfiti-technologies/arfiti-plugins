@@ -543,10 +543,79 @@ INF_DOCUMENT_TYPES = {
     "A": {"AR_INVOICE": False, "AR_CREDIT_MEMO": True},
     "B": {"AP_INVOICE": False, "AP_CREDIT_MEMO": True},
 }
+# Gross tie: when an invoice carries the document's own total (`gross_amount`, the
+# header amount: what the supplier is owed or the customer owes), its net plus the VAT
+# on top must equal it. Reverse-charge VAT (`reverse_charge_vat_amount`) is self-
+# assessed, not part of that total, so it is left out. A net that counted a generated
+# control row (the "Accounts Payable" line, worth the whole document total) fails by
+# the whole document total. The tolerance covers converting the four amounts (net,
+# VAT, reverse-charge VAT, gross) to EUR separately, each rounded to cents.
+# Signed, with a credit memo's net turned back to the document's sign (see
+# gross_mismatch). A mismatch a person has reviewed and accepted
+# (`gross_mismatch_reviewed`: the reason, e.g. a non-recoverable reverse-charge bill
+# whose header amount includes the self-assessed VAT) is reported under
+# `gross_reviewed` instead of refusing.
+INF_GROSS_TOLERANCE = Decimal("0.02")
 BOOLEAN_INVOICE_FLAGS = (
     "has_positive_rate_supply", "registry_code_verified", "non_resident",
     "travel_special_procedure_only", "professional_secrecy", "counted_in_earlier_period",
 )
+
+
+def gross_mismatch(inv: dict, net: Decimal, label: str, credit: bool) -> Optional[str]:
+    """Describe an invoice whose net + VAT is not its gross total, or None.
+
+    Only checked when the invoice carries `gross_amount`; `vat_amount` is then
+    required (a missing VAT would read as 0 and blame the net). Signed, never as
+    magnitudes: an invoice with a negative untaxed line can have a negative net and a
+    positive total (net -50, VAT 120, total 70). `vat_amount`,
+    `reverse_charge_vat_amount` and `gross_amount` are the document's own amounts as
+    stored; `net_amount` carries the credit sign, so a credit memo's net (negative) is
+    turned back to the document's sign before the sum.
+    """
+    if inv.get("gross_amount") in (None, ""):
+        return None
+    gross = required_amount(inv, "gross_amount", label)
+    vat = required_amount(inv, "vat_amount", label)
+    rc_vat = (required_amount(inv, "reverse_charge_vat_amount", label)
+              if inv.get("reverse_charge_vat_amount") not in (None, "") else Decimal("0.00"))
+    document_net = -net if credit else net
+    expected = document_net + vat - rc_vat
+    if abs(expected - gross) <= INF_GROSS_TOLERANCE:
+        return None
+    kind = "credit memo net (sign turned back)" if credit else "net"
+    return (f"{label} (partner {inv.get('partner_key')!r}): {kind} {document_net:.2f} + VAT "
+            f"{vat:.2f} - reverse-charge VAT {rc_vat:.2f} = {expected:.2f}, "
+            f"document total {gross:.2f}")
+
+
+def sign_inconsistency(inv: dict, net: Decimal, label: str, credit: bool) -> Optional[str]:
+    """Describe an invoice whose amounts do not all carry one sign, or None.
+
+    The annex presents an ordinary invoice with every amount positive, and a credit
+    invoice with every amount negative: a credit memo (stored positive; `net_amount`
+    with the credit sign) or an ordinary invoice whose net, VAT and total are all
+    negative or zero (a reduction under VAT Act § 29¹). Anything else — an edited bill
+    with a negative net and a positive total, a credit memo with a negative taxed line,
+    a credit memo whose lines sum below zero — has no presentation in EMTA's
+    instructions that this tool knows. It is neither declared nor counted toward the
+    limit; it goes to `sign_review` with its figures for a person.
+    """
+    vat = (required_amount(inv, "vat_amount", label)
+           if inv.get("vat_amount") not in (None, "") else Decimal("0.00"))
+    gross = (required_amount(inv, "gross_amount", label)
+             if inv.get("gross_amount") not in (None, "") else None)
+    document_net = -net if credit else net
+    amounts = [document_net, vat] + ([gross] if gross is not None else [])
+    all_non_negative = all(a >= 0 for a in amounts)
+    all_non_positive = all(a <= 0 for a in amounts)
+    if all_non_negative or (all_non_positive and not credit):
+        return None
+    kind = "credit memo (stored amounts)" if credit else "invoice"
+    figures = f"net {document_net:.2f}, VAT {vat:.2f}" + (
+        f", total {gross:.2f}" if gross is not None else "")
+    return (f"{kind} with amounts of mixed sign ({figures}): how the annex presents it "
+            "is for a person to decide")
 
 
 def select_inf_partners(invoices: List[dict], side: str) -> dict:
@@ -578,7 +647,8 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
 
     Each invoice dict: partner_key (required; the ERP customer / vendor id), document_type
     (required: AR_INVOICE / AR_CREDIT_MEMO on side A, AP_INVOICE / AP_CREDIT_MEMO on side
-    B; a credit memo always counts as a credit, whatever the sign of net_amount),
+    B; a credit memo always counts as a credit and carries its net_amount with the
+    credit sign, negative or zero),
     currency (required, must be "EUR": amounts converted to the functional currency),
     partner_name, registry_code,
     registry_code_verified (bool), non_resident (bool), partner_kind
@@ -588,6 +658,15 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     0), vat_amount, has_positive_rate_supply (bool, required),
     travel_special_procedure_only, professional_secrecy, counted_in_earlier_period,
     and for side B vat_deducted_in_period (REQUIRED on side B; 0 means not deducted).
+    Optional gross_amount (the document total incl. VAT, i.e. the header amount) with
+    reverse_charge_vat_amount (VAT self-assessed on reverse charge, not in that total):
+    when gross_amount is given (vat_amount is then required), net_amount + vat_amount -
+    reverse_charge_vat_amount must equal gross_amount within INF_GROSS_TOLERANCE, all
+    signed: vat, reverse-charge VAT and gross as the document stores them, net with the
+    credit sign (a credit memo's net is turned back before the sum), or the whole selection is refused with every invoice that
+    differs (a doubled net is caught here) — unless the invoice carries
+    gross_mismatch_reviewed (a person's reason), which lists it under `gross_reviewed`
+    instead. Invoices without gross_amount are listed under `gross_not_checked`.
 
     For a non-resident, `registry_code_verified: true` with an empty registry_code means
     a person confirmed it has no register code assigned in Estonia (then not presented).
@@ -601,8 +680,11 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     VAT number, is also returned under `needs_registry_code` (see `conflicts`).
     A partner that qualifies but has no verified register code is returned under
     `needs_registry_code` for a person to resolve — never filled from a VAT number or
-    another company's record. Returns {"declare", "needs_registry_code",
-    "below_threshold", "excluded"}.
+    another company's record. An invoice whose amounts do not all carry one sign (see
+    sign_inconsistency) is neither declared nor counted toward the limit; it is returned
+    under `sign_review` with its figures. Returns {"declare", "needs_registry_code",
+    "below_threshold", "excluded", "sign_review", "gross_reviewed",
+    "gross_not_checked"}.
     """
     if side not in ("A", "B"):
         raise ValueError("side must be 'A' (invoices issued) or 'B' (invoices received)")
@@ -611,6 +693,10 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         raise ValueError("the invoice list must be a JSON array of invoice objects")
     excluded: List[dict] = []
     included: List[tuple] = []
+    gross_mismatches: List[str] = []
+    gross_reviewed: List[dict] = []
+    gross_not_checked: List[str] = []
+    sign_review: List[dict] = []
     for inv in invoices:
         if not isinstance(inv, dict):
             raise ValueError("each invoice must be a JSON object")
@@ -644,8 +730,29 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
                 f"got {inv.get('document_type')!r}"
             )
         net = required_amount(inv, "net_amount", label)
+        mismatch = gross_mismatch(inv, net, label, INF_DOCUMENT_TYPES[side][doc_type])
+        reviewed_value = inv.get("gross_mismatch_reviewed")
+        if reviewed_value is not None and not isinstance(reviewed_value, str):
+            raise ValueError(f"{label}: gross_mismatch_reviewed must be the person's reason "
+                             f"as text, got {reviewed_value!r}")
+        reviewed = (reviewed_value or "").strip()
+        if inv.get("gross_amount") in (None, ""):
+            gross_not_checked.append(str(inv.get("invoice_number") or f"partner {key}"))
+        elif mismatch and reviewed:
+            gross_reviewed.append({"partner_key": key, "invoice_number": inv.get("invoice_number"),
+                                   "difference": mismatch, "reason": reviewed})
+        elif mismatch:
+            gross_mismatches.append(mismatch)
+        mixed = sign_inconsistency(inv, net, label, INF_DOCUMENT_TYPES[side][doc_type])
+        if mixed:
+            sign_review.append({
+                "partner_key": key, "invoice_number": inv.get("invoice_number"),
+                "document_type": doc_type, "net_amount": inv.get("net_amount"),
+                "vat_amount": inv.get("vat_amount"), "gross_amount": inv.get("gross_amount"),
+                "reason": mixed})
+            continue
         if INF_DOCUMENT_TYPES[side][doc_type]:
-            net = -abs(net)
+            net = -abs(net) or Decimal("0.00")   # a zero net stays "0.00", never "-0.00"
         vat_deducted = (required_amount(inv, "vat_deducted_in_period", label)
                         if side == "B" else None)
         reason = None
@@ -670,14 +777,25 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
 
         # Returned with the invoice: the signed EUR net to put in the annex (credit
         # invoices are entered with a minus sign, KMD INF instructions parts A and B).
+        # Only rows whose amounts carry one sign reach here (sign_inconsistency), so a
+        # negative net means the whole invoice is negative: a credit.
         signed = dict(inv, signed_net_amount=f"{net:.2f}")
         is_credit = INF_DOCUMENT_TYPES[side][doc_type] or net < 0
         for src, dst in (("vat_amount", "signed_vat_amount"),
                          ("vat_deducted_in_period", "signed_vat_deducted_in_period")):
             if src in inv and inv[src] not in (None, ""):
                 value = required_amount(inv, src, label)
-                signed[dst] = f"{(-abs(value) if is_credit else value):.2f}"
+                signed[dst] = f"{((-abs(value) or Decimal('0.00')) if is_credit else value):.2f}"
         included.append((key, reg_code, verified, net, signed))
+
+    if gross_mismatches:
+        raise ValueError(
+            "net plus VAT does not equal the document total on "
+            f"{len(gross_mismatches)} invoice(s); fix the extraction before selecting "
+            "(was a generated control line counted as a document line? A difference a "
+            "person has reviewed is passed with gross_mismatch_reviewed):\n  "
+            + "\n  ".join(gross_mismatches)
+        )
 
     # The limit is per transaction partner, not per ERP record. Records are linked
     # through any register code they carry, verified or not (two cards for one company
@@ -764,7 +882,8 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         else:
             declare.append(row)
     return {"declare": declare, "needs_registry_code": needs_code,
-            "below_threshold": below, "excluded": excluded}
+            "below_threshold": below, "excluded": excluded, "sign_review": sign_review,
+            "gross_reviewed": gross_reviewed, "gross_not_checked": gross_not_checked}
 
 
 # --------------------------------------------------------------------------- #

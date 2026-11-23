@@ -63,7 +63,9 @@ invoices paid in June — the payment-vs-invoice-date confusion.
 ## 4. Tax-code coverage & jurisdiction sanity — BLOCK on missing, WARN on mismatch
 
 - **BLOCK**: every taxable transaction line has a tax code (existing CP2), and each code
-  resolves to a KMD line (see `references/tax-codes-ee.md`).
+  resolves to a KMD line (see `references/tax-codes-ee.md`). Check only lines whose
+  `line_role` is `document`: the generated `control` row of an AP invoice never carries
+  a tax code and is not a gap.
 - **WARN**: supplier jurisdiction agrees with the code — an Estonian (EE) vendor must
   **not** carry an intra-EU-acquisition code (line 6); a non-EU supplier must map to
   line 7, not line 6. Compare `vendor.country_code` against the code's `tax_scope`.
@@ -105,9 +107,38 @@ python3 scripts/generate_kmd.py --select-inf invoices_A.json --side A
 python3 scripts/generate_kmd.py --select-inf invoices_B.json --side B
 ```
 
-Do not aggregate the transaction header `amount`: it is gross, and it includes invoices
-the instructions exclude (no supply at a positive rate, natural persons, part B
-invoices without deducted VAT).
+Do not aggregate the transaction header `amount` for the limit: it is gross, and it
+includes invoices the instructions exclude (no supply at a positive rate, natural
+persons, part B invoices without deducted VAT). Pass it per invoice as `gross_amount`
+only, for the check below.
+
+Each invoice's figures come from its `line_role: "document"` lines only (SKILL Step 2,
+"Per-invoice figures"); the `control` row a native AP invoice returns among its lines
+is worth the whole document total and must never be added.
+
+- **Gross tie** — every invoice in both lists carries `gross_amount` (the header
+  `amount`, in EUR) and, where it has reverse-charge lines, `reverse_charge_vat_amount`.
+  The selector refuses the selection when net + VAT − reverse-charge VAT (signed; a
+  credit memo's net turned back to the document's sign) differs from `gross_amount` by
+  more than 0.02 on any invoice, and lists each one — **BLOCK** until
+  a person has dealt with every listed invoice (an invoice the person accepts carries
+  their reason in `gross_mismatch_reviewed` and is reported under `gross_reviewed`). A
+  non-empty `gross_not_checked` is itself a **BLOCK**: the check did not run on those
+  invoices.
+- **Canonical tie** — over every document of an `ap`-category type (input) and
+  `ar`-category type (output) inside the VAT registration (`registration_type` `vat`;
+  `effective_to` from `get_entity("tax_registration", id=…)`; by the document's date, a
+  credit memo by the date of the invoice it credits), not only invoices and credit
+  memos: input Σ `taxed_net` = Σ `taxable_amount` of
+  `vat_report.input_vat_details`; output Σ `taxed_net` = Σ `taxable_amount` of
+  `output_vat_details` − Σ line net of the `ap` documents' reverse-charge lines;
+  reversals dated in the period subtract the reversed document's `taxed_net`. Exact
+  for EUR documents, 0.01 per line for foreign-currency ones. Any other difference —
+  **BLOCK**, with the documents that explain it (SKILL Step 2).
+- **Accrual reversals** — any AP invoice whose header (`get_entity("transaction",
+  ids=[…])`) carries `metadata.accrual_reversal` — **BLOCK** for that invoice until a
+  person decides its net: its accrual-reversal line reads as `document` and the header
+  total includes it, so neither tie catches it.
 
 - Every partner in `declare` (invoices without VAT at least EUR 1,000.00, inclusive)
   must have its invoices in the annex, and the annex must hold no other partner unless
@@ -117,6 +148,9 @@ invoices without deducted VAT).
   must be presented) and its other invoices under `below_threshold` (they are not).
   (`generate_kmd.py` derives the flags from the annex lines, so the gate's job is to
   confirm the annex lines match the selection.)
+- Any invoice in `sign_review` (amounts of mixed sign: an edited bill with a negative net
+  and a positive total, a credit memo with a negative line) — **BLOCK** until a person
+  decides how it is presented; it was neither declared nor counted toward the limit.
 - Any partner in `needs_registry_code` — **BLOCK** until a person supplies a verified
   register code or confirms the partner is a non-resident without one. Never fill it
   from a VAT number.

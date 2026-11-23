@@ -59,11 +59,17 @@ This step is CRITICAL. Do NOT hardcode tax code names. Always discover and class
 
 1. Fetch the entity's active Estonian tax codes:
    ```
-   query("tax_code", filters={"legal_entity_id": ID, "is_active": true})
+   query("tax_code", filters={"legal_entity_id": ID, "is_active": true}, limit=100)
    ```
+   The default page is 50 codes and 100 is the most one call returns: read further pages
+   with `offset` (100, 200, …) until a page comes back shorter than the limit. The list
+   does not return `tax_type` or `description`; read them with
+   `get_entity("tax_code", id=…)` for a code whose classification needs them.
 
 2. For each tax code, apply the classification rules from **references/tax-codes-ee.md**:
-   - Check `reporting_code_override` first (entity-level override takes priority)
+   - `reporting_code_override` (an entity-level KMD line override) is not returned by
+     `query("tax_code")` or `get_entity("tax_code")` today (references/tax-codes-ee.md):
+     use one only when the person supplies it, never assume there is none
    - Then classify by properties: `default_rate`, `is_reverse_charge`, `is_recoverable`, `tax_type`, `tax_scope`, `metadata`
    - Map each code to a KMD line using the decision tree in **references/kmd-form-structure.md**
 
@@ -166,6 +172,16 @@ drop the original because it was later reversed.
    overlap (an invoice is in the first list and in the catch-all), so de-duplicate by
    `id` before rebuilding any total.
 
+   **Use only the document's own lines.** Every row in `lines` carries `line_role`:
+   `document` (a line the invoice was issued or received with, taxed or untaxed),
+   `control` (the generated payable / receivable counterpart, worth the whole document
+   total) or `generated` (another row the system wrote). A native AP invoice or AP credit
+   memo returns its control row among the lines: a bill of net 1,000 with VAT 240 comes
+   back as the business line (1,000, VAT 240) **and** a control line (1,240, no tax
+   code). Summing every line would give 2,240. Take only `line_role: "document"` rows
+   for every figure below; never add `control` or `generated` rows, and never pick rows
+   out by account number or account name.
+
    Per document line, the net (tax base) is `line_amount − tax_amount` when the line
    `is_tax_inclusive`, otherwise `line_amount` — the same rule `v_tax_lines` applies.
    These are document-currency amounts. For a foreign-currency document convert to the
@@ -179,8 +195,92 @@ drop the original because it was later reversed.
    means the document's rate needs checking (documents imported through a connector
    carry the rate the source system gave).
    A credit memo's lines are stored positive; the view makes each line negative. Pass
-   a credit memo's `net_amount` as −Σ|line net| (each line's absolute value, summed,
-   negated) with its `document_type`; the selector treats any credit memo as a credit.
+   a credit memo's `net_amount` as −(Σ line net), the document's own sum negated, with
+   its `document_type`, and its VAT, reverse-charge VAT and `gross_amount` as stored
+   (positive); the selector treats any credit memo as a credit and turns the net back
+   for the gross tie.
+
+   **Per-invoice figures** (read the entity's tax codes once with
+   `query("tax_code", filters={"legal_entity_id": ID}, limit=100)`, every page as in
+   Step 1 and inactive codes included, since a posted line can carry one; a line's
+   `tax_code_id` is the
+   code's `master_tax_code_id`). Over the invoice's `document` lines:
+   - `net_amount` = Σ line net (credit memo: −(Σ line net)), untaxed lines included;
+   - `taxed_net` = Σ line net of the lines **with** a tax code (credit memo:
+     −Σ|line net| of those lines): the part `vat_report` sees, used only for the tie
+     below;
+   - `vat_amount` = Σ `tax_amount`;
+   - `reverse_charge_vat_amount` = Σ `tax_amount` of the lines whose tax code has
+     `is_reverse_charge: true` (self-assessed; not part of what the supplier is owed);
+   - `gross_amount` = the header `amount` (the document total the supplier is owed or
+     the customer owes);
+   - `has_positive_rate_supply` = any line whose tax code's `default_rate` is 24, 22,
+     20, 13, 9 or 5.
+   Convert all amounts to EUR as above.
+
+   **Two ties before any figure is used** (each mismatch stops the preparation; present
+   the documents that differ to the person, do not adjust a figure to make it fit):
+   - **Gross tie, per document**: `net_amount` + `vat_amount` −
+     `reverse_charge_vat_amount` = `gross_amount`, signed (an edited bill can have a
+     negative net and a positive total: net −50, VAT 120, total 70; a credit memo's net
+     is turned back to the document's sign), within 0.02 for the separate EUR
+     roundings. Such a mixed-sign invoice passes this tie but is not presented: the
+     selector returns it under `sign_review` (Step 5). The selector checks this for every invoice that carries
+     `gross_amount`, refuses the selection listing each invoice that differs, and lists
+     invoices passed without one under `gross_not_checked` (that list must be empty).
+     Known causes of a difference, each for the person:
+     - an untaxed business line posted to the control account itself (it reads as
+       `control`, so the net misses it by its amount);
+     - a reverse-charge bill whose header `amount` includes the self-assessed VAT: check
+       the bill itself, its total equals net + reverse-charge VAT instead of the net
+       (non-recoverable reverse-charge bills were once posted this way);
+     - a reverse-charge line entered tax-inclusive (`is_tax_inclusive` with a
+       reverse-charge code): the payable is the line amount, VAT included, so the tie
+       always differs by that VAT. How such a bill should be booked is for the person.
+     When the person has checked the invoice and accepts its figures, pass their reason
+     as `gross_mismatch_reviewed` on that invoice: the selector then lists it under
+     `gross_reviewed` instead of refusing. Never set it yourself.
+   - **Canonical tie, per direction**: `vat_report` counts the tax lines of every
+     document whose transaction type is in the `ap` category (input) or the `ar`
+     category (output), not only invoices and credit memos. Read the categories once
+     with `query("transaction_type", filters={"category": ["ap", "ar"]}, limit=100)`
+     (every page) and take, from
+     the de-duplicated catch-all list above, every document of those types whose
+     registration date falls inside the entity's VAT registration
+     (`query("tax_registration", filters={"legal_entity_id": ID})`: every row with
+     `registration_type` `vat` and `is_active` — there can be more than one, for
+     example a registration that ended and a later one — each from its
+     `effective_from`; the list does not return `effective_to`, so read each with
+     `get_entity("tax_registration", id=…)`, empty meaning still registered. A
+     document is inside when its date falls within any of them, as `v_tax_lines`
+     checks). The registration date is the document's own
+     date, except a credit memo, which uses the date of the invoice it credits.
+     `vat_report` drops lines outside the registration, in both directions. Then:
+     - input: Σ `taxed_net` of the `ap` documents = Σ `taxable_amount` of
+       `input_vat_details`;
+     - output: Σ `taxed_net` of the `ar` documents = Σ `taxable_amount` of
+       `output_vat_details` − Σ line net of the `ap` documents' reverse-charge lines
+       (credit memos negative; `vat_report` counts self-assessed reverse charge as
+       output too).
+     For each reversal dated in the period, subtract the reversed document's
+     `taxed_net` (`vat_report` signs it negative in the reversal's period).
+     EUR documents tie to the cent; allow 0.01 per line of a foreign-currency document
+     (`vat_report` rounds per line). Only AR/AP invoices and credit memos feed the KMD
+     INF; the other `ap` / `ar` documents (debit memos, prepayments, imported types)
+     are in the tie only. A difference means a document is missing from the lists
+     (status or type filter), a tax code whose `tax_type` is not VAT (read it with
+     `get_entity("tax_code", id=…)`; `vat_report`
+     counts only VAT-type codes), or a line's role is wrong — for example an untaxed
+     business line posted to the control account itself reads as `control`. Find the
+     documents and present them; do not file.
+   - **Accrual reversals, per AP invoice**: read the period's AP invoices' headers with
+     `get_entity("transaction", ids=[…])` (up to 100 ids a call). An invoice whose
+     `metadata.accrual_reversal` is set carries a line the system generated to reverse
+     an accrued expense for goods received earlier ("Reverse … accrual (GRNI)", no tax
+     code). The reads mark that line `document`, and the system added the same amount
+     to the header total, so neither tie above catches it: its net would be too high
+     by `metadata.accrual_reversal.amount_reversed`. Do not use such an invoice's net;
+     list it, with the amount reversed, for the person to decide.
 
 3. **Reversed and voided documents of the period — review list.** A reversal carries
    no document lines and no customer or vendor of its own, and `vat_report` nets it
@@ -255,8 +355,9 @@ transaction on your own.
 
 Check that all transaction lines have valid tax codes:
 
-1. Scan all fetched transaction lines
-2. Flag any lines without a tax code assigned
+1. Scan the fetched transaction lines whose `line_role` is `document` (a `control` row
+   never carries a tax code; it is not a gap)
+2. Flag any of those lines without a tax code assigned
 3. Flag any lines using inactive or unclassified tax codes
 
 **CP2 checkpoint**: If lines are missing tax codes, list them with transaction number, date, and amount. Ask the user to assign tax codes before continuing.
@@ -318,24 +419,33 @@ refundable if negative).
 
 Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instructions, 07.2025):
 
-1. **Build the invoice lists** from Step 2's invoices (`include_lines=true`): per invoice
-   the `document_type`, the total **without VAT in EUR** (Σ line net × `exchange_rate`,
-   see Step 2) with `currency: "EUR"`, the VAT (Σ `tax_amount`, converted the same way),
-   whether any line is at 24/22/20/13/9/5 %, the partner (`partner_key` = the
-   `customer_id` or `vendor_id`) and its register code. Part A uses invoices issued; part B uses invoices received whose VAT
-   is deducted in KMD line 5 this period (with the amount deducted).
+1. **Build the invoice lists** from Step 2's per-invoice figures — `document` lines
+   only, never the `control` row: per invoice the `document_type`, `net_amount` (the
+   total **without VAT in EUR**), `vat_amount`, `reverse_charge_vat_amount`,
+   `gross_amount` (header `amount`, in EUR), `has_positive_rate_supply`, with
+   `currency: "EUR"`, the partner (`partner_key` = the `customer_id` or `vendor_id`) and
+   its register code. Always pass `gross_amount`: the selector then refuses any invoice
+   whose net plus VAT is not its total, which is how a net that counted the control row
+   is caught. Part A uses invoices issued; part B uses invoices received whose VAT
+   is deducted in KMD line 5 this period (with the amount deducted). Do not run the
+   selection until both ties in Step 2 hold.
 2. **Select partners** with the generator's selection mode, which applies the
    threshold (at least EUR 1,000.00 without VAT per partner, inclusive; ordinary and
    credit invoices totalled separately; excluded invoice types left out). The limit is
    per transaction partner: records that carry the same register code are combined
    (`partner_keys`, `partner_names` list them), and such a group is declared only when
    every invoice in it carries the same verified code — otherwise it goes to
-   `needs_registry_code`. It refuses non-EUR amounts and a missing document type:
+   `needs_registry_code`. An invoice whose amounts do not carry one sign (an edited bill
+   with a negative net and a positive total, a credit memo with a negative line, a
+   credit memo whose `net_amount` is above zero) is neither declared nor counted: it is
+   returned under `sign_review` with its figures for a person
+   (references/kmd-inf-annex.md). It refuses non-EUR amounts and a missing document type:
    ```
    python3 scripts/generate_kmd.py --select-inf invoices_A.json --side A
    python3 scripts/generate_kmd.py --select-inf invoices_B.json --side B
    ```
-   Do not total the header `amount`: it is the gross amount.
+   Do not total the header `amount` for the limit: it is the gross amount. It goes in
+   only as each invoice's `gross_amount`, for the check.
 3. **Register codes**: use only a verified register code from the partner's own record
    (see the reference: a customer's `tax_id`, a registry-code custom field, never a VAT
    number). Partners in `needs_registry_code` go on a review list for a person to
@@ -344,7 +454,7 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
    invoices are entered with a **minus sign** in every amount column (`invoiceSum`,
    `sumForRateInPeriod`, `invoiceSumVat`, `vatInPeriod`, and the cash-accounting
    columns). Use the signed values each returned invoice carries: `invoiceSum` (the
-   whole invoice without VAT) from `signed_net_amount`; `sumForRateInPeriod` = Σ line net
+   whole invoice without VAT) from `signed_net_amount`; `sumForRateInPeriod` = Σ `document` line net
    at that line's rate group declared this period, negative for a credit invoice (one
    annex line per rate group, up to 4 per invoice); `vatInPeriod` from
    `signed_vat_deducted_in_period`; `invoiceSumVat` = `signed_net_amount` +
@@ -364,8 +474,8 @@ When no partner reaches the threshold, omit the annex — the generator sets
 
 **CP4 checkpoint**: Part A column 9 per rate ≤ the KMD rate lines, part B column 8 ≤
 `inputVatTotal`; explain the difference by cause (partners below the threshold, natural
-persons, excluded invoices). Present the `needs_registry_code` list and stop for the
-person's answer before filing.
+persons, excluded invoices, `sign_review`). Present the `needs_registry_code` and
+`sign_review` lists and stop for the person's answer before filing.
 
 ### Step 6: Prepare EC Sales List (Form VD)
 
