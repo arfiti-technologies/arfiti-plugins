@@ -187,16 +187,17 @@ without `gross_amount` are listed under `gross_not_checked`. Invoices of mixed s
 listed under `sign_review` (above).
 
 **What `line_role` can and cannot see.** A role the writer recorded wins: the AP
-invoice and credit memo writers record their payable row as `control` and the reversal
-of an accrued expense as `generated`, on bills posted since that change (older rows are
-not relabelled). Without a recorded role the read works it out: on an AP or AR invoice,
+invoice and credit memo writers record their payable row as `control`, and bills posted
+between AR-1438 and AR-1444 record the reversal of an accrued expense as `generated`
+(older rows are not relabelled; newer bills have no such row). Without a recorded role the read works it out: on an AP or AR invoice,
 debit memo or credit memo, a line with no tax code posted to an account whose subtype is
 the document's control subtype (`accounts_payable` / `accounts_receivable`) is
 `control`, everything else `document`. Consequences:
 
 - The reversal of an accrued expense for goods received earlier, which the AP invoice
-  writer adds to a bill as a line ("Reverse … accrual (GRNI)", no tax code, so
-  `vat_report` never sees it), is also added to the header total. On a newer bill it
+  writer added to a bill as a line until AR-1444 (November 2026; "Reverse … accrual
+  (GRNI)", no tax code, so `vat_report` never sees it), is also inside that bill's header
+  total. Bills posted since AR-1444 have neither the line nor the mark. On a newer bill it
   reads as `generated`: the net is the bill's own, and the gross tie shows a difference
   of the amount reversed. On an older bill it reads as `document`: the net is too high
   by that amount and the gross tie passes. Either way the header's

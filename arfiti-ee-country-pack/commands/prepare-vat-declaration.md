@@ -46,7 +46,7 @@ Follow **skills/estonian-vat-declaration/SKILL.md**:
    `amount` as `gross_amount`. Before using the figures: per document, net + VAT −
    reverse-charge VAT must equal the header total, signed (the selector refuses otherwise); per
    direction, the taxed nets of every ap / ar document inside the VAT registration must
-   equal `vat_report`'s taxable bases; and any AP invoice whose header carries `metadata.accrual_reversal` goes to a person. A
+   equal `vat_report`'s taxable bases; and any AP invoice whose header carries `metadata.accrual_reversal` (bills posted before AR-1444 only) goes to a person. A
    mismatch stops the preparation with the documents that differ (SKILL Step 2). An
    invoice whose amounts do not carry one sign comes back under `sign_review` and goes to
    a person; it is neither declared nor counted toward the limit. So do invoices whose

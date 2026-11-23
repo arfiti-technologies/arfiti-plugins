@@ -258,6 +258,7 @@ submit(object_type="transaction", operation="post", data=JSON.stringify({
     "transaction_type_code": "JOURNAL_ENTRY",
     "legal_entity_id": 9,
     "description": "Oct 2026 utility accrual",
+    "vendor_id": 42,
     "lines": [
         {"account_number": "6300", "debit": 2500.00, "credit": 0, "description": "Utilities expense - Oct estimate"},
         {"account_number": "2600", "debit": 0, "credit": 2500.00, "description": "Accrued expenses - utilities"}
@@ -274,7 +275,7 @@ CR  2600 Accrued Expenses          $2,500
 
 ### Reversing Accruals
 
-When the actual bill arrives, reverse the accrual and book the real expense.
+When the actual bill arrives, reverse the accrual and book the real expense. The AP invoice does **not** reverse it for you: it posts the bill at its gross and, if the vendor still has an open accrued-expense balance, returns an advisory `open_accrued_expense` note. The reversing journal below is how the accrual is cleared; give it the same `vendor_id` as the accrual so the note stops reporting it.
 
 **Reversal entry (next period):**
 ```
@@ -282,6 +283,7 @@ submit(object_type="transaction", operation="post", data=JSON.stringify({
     "transaction_type_code": "JOURNAL_ENTRY",
     "legal_entity_id": 9,
     "description": "Reverse Oct utility accrual",
+    "vendor_id": 42,
     "lines": [
         {"account_number": "2600", "debit": 2500.00, "credit": 0, "description": "Reverse accrual"},
         {"account_number": "6300", "debit": 0, "credit": 2500.00, "description": "Reverse accrual"}

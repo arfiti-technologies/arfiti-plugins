@@ -297,7 +297,9 @@ drop the original because it was later reversed.
      documents and present them; do not file.
    - **Accrual reversals, per AP invoice**: read the period's AP invoices' headers with
      `get_entity("transaction", ids=[…])` (up to 100 ids a call). An invoice whose
-     `metadata.accrual_reversal` is set carries a line the system generated to reverse
+     `metadata.accrual_reversal` is set (only bills posted before AR-1444, November 2026;
+     the AP invoice no longer reverses accruals, so newer bills never carry it) carries a
+     line the system generated to reverse
      an accrued expense for goods received earlier ("Reverse … accrual (GRNI)", no tax
      code), and the system added the same amount to the header total. On a bill
      posted since writers record line roles the reads mark that line `generated`, so
