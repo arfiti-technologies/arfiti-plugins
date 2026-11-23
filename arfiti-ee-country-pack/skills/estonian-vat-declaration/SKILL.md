@@ -299,10 +299,13 @@ drop the original because it was later reversed.
      `get_entity("transaction", ids=[…])` (up to 100 ids a call). An invoice whose
      `metadata.accrual_reversal` is set carries a line the system generated to reverse
      an accrued expense for goods received earlier ("Reverse … accrual (GRNI)", no tax
-     code). The reads mark that line `document`, and the system added the same amount
-     to the header total, so neither tie above catches it: its net would be too high
-     by `metadata.accrual_reversal.amount_reversed`. Do not use such an invoice's net;
-     list it, with the amount reversed, for the person to decide.
+     code), and the system added the same amount to the header total. On a bill
+     posted since writers record line roles the reads mark that line `generated`, so
+     the net leaves it out and the gross tie differs by
+     `metadata.accrual_reversal.amount_reversed`; on an older bill they mark it
+     `document`, neither tie catches it and its net would be too high by that amount.
+     Do not use such an invoice's net either way; list it, with the amount reversed,
+     for the person to decide.
 
 3. **Reversed and voided documents of the period — review list.** A reversal carries
    no document lines and no customer or vendor of its own, and `vat_report` nets it

@@ -142,8 +142,9 @@ is worth the whole document total and must never be added.
   **BLOCK**, with the documents that explain it (SKILL Step 2).
 - **Accrual reversals** — any AP invoice whose header (`get_entity("transaction",
   ids=[…])`) carries `metadata.accrual_reversal` — **BLOCK** for that invoice until a
-  person decides its net: its accrual-reversal line reads as `document` and the header
-  total includes it, so neither tie catches it.
+  person decides its net: the header total includes the accrual reversal; on an older
+  bill its line reads as `document` and neither tie catches it, on a newer one it reads
+  as `generated` and the gross tie differs by the amount reversed.
 
 - Every partner in `declare` (invoices without VAT at least EUR 1,000.00, inclusive)
   must have its invoices in the annex, and the annex must hold no other partner unless
