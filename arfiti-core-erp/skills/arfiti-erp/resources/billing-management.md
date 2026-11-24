@@ -1758,7 +1758,8 @@ a historical data repair. Runtime is merged; this verification did not deploy it
 A platform checkout (Stripe today) needs five choices: payment terms, the
 dunning schedule, which items the plan and add-ons are, their revenue accounts,
 and the tax code for the customer. They come from one setting on the billing
-entity, `config_settings` key `platform_billing`, edited through
+entity, `config_settings` key `platform_billing`, edited by an owner or admin
+through
 `submit(object_type="config_setting", operation="create" | "update", data=JSON.stringify({"legal_entity_id": <billing entity>,
 "config_key": "platform_billing", "config_value": {...}}))`:
 

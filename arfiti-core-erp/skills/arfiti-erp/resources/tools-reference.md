@@ -69,8 +69,12 @@ query("transaction_line", filters={"legal_entity_id": 12,
                                    "debit": {"gte": 100, "lte": 900}})
 ```
 
-**Configuration settings** are readable as `config_setting` (read-only; change
-them with `submit(object_type="config_setting", operation="update", ...)`):
+**Configuration settings** are readable as `config_setting` by any member
+(read-only here). Changing one, with `submit(object_type="config_setting",
+operation="update", ...)`, is for an owner or admin; an organisation default
+(no `legal_entity_id`) also needs access to every entity. Anyone else is
+refused with `permission_denied`: tell the user who can make the change rather
+than retrying:
 
 ```javascript
 // One key for one entity, e.g. the reconciliation write-off limit
