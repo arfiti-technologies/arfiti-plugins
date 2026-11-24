@@ -1,0 +1,28 @@
+---
+name: process-bank-statements
+description: Phase 3 of year-end bookkeeping. Read bank statements, create vendors/customers, classify transactions, and post them. Processes month by month.
+---
+
+# Process Bank Statements
+
+Guide me through processing bank statements for my company:
+
+1. Ask which legal entity, fiscal year, and which bank account to process
+2. Ask me to paste or upload the bank statement (CSV or PDF)
+3. Parse the data and show me a summary (line count, date range, totals)
+4. Extract unique counterparty names from the statements
+5. Check which vendors and customers already exist in the system
+6. Show me the new counterparties and ask me to confirm before creating them
+7. Create the confirmed vendors and customers
+8. Classify each bank line by transaction type (payment, receipt, fee, transfer, etc.)
+9. Show me the classification table for review — let me correct any misclassifications
+10. After I confirm, post all transactions for the month
+11. Report results: how many posted successfully, any failures
+12. Ask if I want to continue with the next month or next bank
+
+Use the Year-End Bookkeeping skill for the full Phase 3 workflow.
+
+
+## Card purchases and close controls
+
+Use backend purchase grouping and shared matching; preserve each source movement. Card source confirmation, bill settlement and receipt evidence are separate checks. A successful agent run or a zero unmatched count cannot prove source completeness. Require original opening/closing balances, explicit account interval/provenance and the routed-card movement bridge before close. Never create an adjusting journal merely to erase an unexplained source gap. Missing source evidence on a paid bill belongs on that existing bill. Historical reset/replay requires its own approved dependency manifest and the transaction.delete workflow; it is not implied by implementation or period-close work.

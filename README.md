@@ -4,23 +4,25 @@ AI-powered plugins that give finance and accounting teams superpowers inside Cla
 
 ## Available Plugins
 
-### Core
+### Core: `arfiti`
 
-Universal plugins that work with any chart of accounts and any country.
+One plugin, [arfiti](./arfiti), for any chart of accounts and any country. It carries the Arfiti connector and every core skill, command and subagent; each skill is loaded only when the task matches. Commands are called `/arfiti:<command>`.
 
-| Plugin | What it does | Commands |
+| Area | What it does | Commands or skills |
 |--------|-------------|----------|
-| [arfiti-core-financial-reports](./arfiti-core-financial-reports) | Financial reporting suite: Balance Sheet, P&L, Cash Flow, Trial Balance, Aging Analysis, and Dimension Analysis. Discovers account properties dynamically — works with any COA. | `/balance-sheet` `/profit-and-loss` `/cash-flow` `/trial-balance` `/aged-receivables` `/aged-payables` `/dimension-analysis` `/financial-summary` |
-| [arfiti-core-budget-planning](./arfiti-core-budget-planning) | Budget planning: annual/quarterly budgets, forecasting from actuals, employee cost budgeting with burden rates, and project budgeting. | `/create-budget` `/forecast-budget` `/preview-budget` `/review-variance` |
-| [arfiti-core-cost-allocation](./arfiti-core-cost-allocation) | Cost allocation across departments, projects, or dimensions. Standalone mode (from GL balances) and document-linked mode (from a specific bill/invoice with full traceability). | `/run-allocation` `/preview-allocation` |
-| [arfiti-core-erp](./arfiti-core-erp) | The operating manual for the Arfiti ERP inside Claude: the `submit` write gateway and its approval lanes, the read tools, the `get_*` / `manage_*` tool pairs, and a domain guide for each area. Skills and reference documents only; generated from the monorepo skill templates. | Skill `arfiti-erp` (no slash commands) |
-| [arfiti-core-implementation-consultant](./arfiti-core-implementation-consultant) | ERP migration consultant. Guides customers through the full migration journey: chart of accounts setup, opening balances with open transactions (individual AR invoices, AP bills, fixed assets), master data import, gap period transaction processing, and go-live verification. Supports 4 migration paths — Connector (Merit/QBO/SmartAccounts), CSV/Manual, Greenfield, and Hybrid. Features advisory intelligence that scans the balance sheet to detect what additional data is needed. | `/start-migration` `/migration-status` `/import-data` `/verify-migration` `/close-migration` |
-| [arfiti-core-agent-procedures](./arfiti-core-agent-procedures) | The procedures Arfiti's own agents follow — bills, bank and card statement lines, payment reconciliation, vendors and customers, configuration, expense claims and checks, period close, billing usage — so your own Claude or Cowork does the same work the same way. Generated from the agents' procedures. | Skills `arfiti-bill-processing`, `arfiti-bank-statement-lines`, `arfiti-reconciliation`, `arfiti-period-close`, `arfiti-expense-claim` and 8 more (no slash commands) |
-| [arfiti-core-country-setup](./arfiti-core-country-setup) | Configures a live company for its country through the connector: tax codes, authorities, registrations, filing calendars, withholding, payroll taxes and expense rates, researched with sources, confirmed with the customer and read back. Also helps author country payroll and VAT plugins. | `/set-up-country`, `/author-country-plugin` |
+| Operating guide | How to use the connector: the `submit` write gateway and its approval lanes, the read tools, the `get_*` / `manage_*` tool pairs, and a domain guide for each area. Generated from the monorepo skill templates. | Skill `arfiti-erp` |
+| Agent procedures | The procedures Arfiti's own agents follow (bills, bank and card statement lines, payment reconciliation, vendors and customers, configuration, expense claims and checks, period close, billing usage), so your own Claude or Cowork does the same work the same way. Generated from the agents' procedures. | Skills `arfiti-bill-processing`, `arfiti-bank-statement-lines`, `arfiti-reconciliation`, `arfiti-period-close`, `arfiti-expense-claim` and 8 more |
+| Financial reports | Balance Sheet, P&L, Cash Flow, Trial Balance, AR and AP aging, P&L by dimension and a Financial Summary, presented from the server's report contract with deterministic formatters. | `/balance-sheet` `/profit-and-loss` `/cash-flow` `/trial-balance` `/aged-receivables` `/aged-payables` `/dimension-analysis` `/financial-summary` |
+| Budget planning | Annual and quarterly budgets, forecasts from actuals, employee cost budgeting with burden rates, project budgeting and variance review. | `/create-budget` `/forecast-budget` `/preview-budget` `/review-variance` |
+| Cost allocation | Allocation across departments, projects or dimensions, from GL balances or linked to a specific bill or invoice. | `/run-allocation` `/preview-allocation` |
+| Implementation consultant | Migration from another system: chart of accounts, opening balances with open invoices, bills and fixed assets, master data import, gap period and go-live checks. Subagent `balance-sheet-analyzer`. | `/start-migration` `/migration-status` `/import-data` `/verify-migration` `/close-migration` |
+| Country setup | Configures a live company for its country: tax codes, authorities, registrations, filing calendars, withholding, payroll taxes and expense rates, researched with sources, confirmed and read back. Subagents `tax-researcher` and `payroll-specialist`. | `/set-up-country` `/author-country-plugin` |
+
+It replaces the seven `arfiti-core-*` plugins (AR-1467).
 
 ### Estonia (EE)
 
-One plugin, [arfiti-ee-country-pack](./arfiti-ee-country-pack), with four skills. A country pack is one plugin per country, named `arfiti-<country code>-country-pack`.
+One plugin, [arfiti-ee](./arfiti-ee), with four skills. A country pack is one plugin per country, named `arfiti-<country code>`. It replaces `arfiti-ee-country-pack` (AR-1467).
 
 | Area | What it does | Commands |
 |--------|-------------|----------|
@@ -58,6 +60,7 @@ plugin-name/
   .claude-plugin/plugin.json    # Plugin manifest (name, version, description)
   .mcp.json                     # MCP server connection (links to Arfiti backend)
   commands/                     # Slash commands (e.g. /prepare-annual-report)
+  agents/                       # Subagents (e.g. tax-researcher)
   skills/                       # Detailed workflow instructions + reference data
     skill-name/
       SKILL.md                  # Step-by-step workflow with checkpoints
@@ -111,7 +114,7 @@ support@arfiti.com · Documentation: https://arfiti.com/docs
 
 ## Publishing to the Anthropic directory
 
-This repository's contents are submitted to the Anthropic directory from `arfiti-technologies/arfiti-plugins`, which the publish workflow syncs and nobody edits by hand. Each plugin folder needs a README with a "What it runs and sends" section, a LICENSE and a `license` in `plugin.json`, all checked by `plugins/scripts/check_mcp_configs.py`. `arfiti-core-erp` is generated: edit `mcp-server/skill-templates/base`, run `plugins/scripts/build_core_plugin.py`, and commit both. The full process is in [GUIDE_PLUGINS.md](../docs/GUIDES/GUIDE_PLUGINS.md#anthropic-directory).
+This repository's contents are submitted to the Anthropic directory from `arfiti-technologies/arfiti-plugins`, which the publish workflow syncs and nobody edits by hand. Each plugin folder needs a README with a "What it runs and sends" section, a LICENSE and a `license` in `plugin.json`, all checked by `plugins/scripts/check_mcp_configs.py`. `arfiti` is partly generated: its `arfiti-erp` skill, manifest, `.mcp.json` and README come from `plugins/scripts/build_core_plugin.py` (edit `mcp-server/skill-templates/base`), its `arfiti-*` procedure skills from `managed-agents/scripts/build_skill_plugin.py --publish` (edit `managed-agents/skills`); its other skills, commands, agents and scripts are edited in place. Rerun `build_core_plugin.py` after adding a skill, command or agent so the README lists it, and commit both. The full process is in [GUIDE_PLUGINS.md](../docs/GUIDES/GUIDE_PLUGINS.md#anthropic-directory).
 
 ## Versioning (assigned when publishing)
 

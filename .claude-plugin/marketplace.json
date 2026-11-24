@@ -5,54 +5,33 @@
     "email": "support@arfiti.com"
   },
   "metadata": {
-    "description": "AI-powered finance and accounting plugins for Claude. Reporting, budgeting, cost allocation, and country-specific compliance (Estonia)."
+    "description": "Arfiti for Claude: one core plugin with the connector, the operating guide, the agents' procedures, financial reports, budgets, cost allocation, migration and country setup; and country packs (Estonia)."
   },
   "plugins": [
     {
-      "name": "arfiti-core-financial-reports",
-      "source": "./arfiti-core-financial-reports",
-      "description": "Financial reporting suite: Balance Sheet, Profit & Loss, Cash Flow, Trial Balance, Aging Analysis and P&L by dimension, presented from the server's exact report contract.",
-      "version": "3.0.1",
-      "category": "reporting",
-      "keywords": [
-        "financial-reports",
-        "balance-sheet",
-        "income-statement",
-        "cash-flow",
-        "aging"
-      ]
-    },
-    {
-      "name": "arfiti-core-budget-planning",
-      "source": "./arfiti-core-budget-planning",
-      "description": "Budget planning: annual/quarterly budgets, forecasting from actuals, employee cost budgeting with burden rates, and project budgeting.",
-      "version": "2.0.7",
-      "category": "planning",
-      "keywords": [
-        "budget",
-        "forecast",
-        "variance",
-        "planning"
-      ]
-    },
-    {
-      "name": "arfiti-core-cost-allocation",
-      "source": "./arfiti-core-cost-allocation",
-      "description": "Cost allocation across departments, projects, or dimensions. Standalone mode (from GL balances) and document-linked mode (from a specific bill/invoice).",
-      "version": "3.0.5",
+      "name": "arfiti",
+      "source": "./arfiti",
+      "description": "The Arfiti finance system inside Claude: the connector, the operating guide to its tools, the procedures Arfiti's own agents follow, financial reports, budgets, cost allocation, migration from another system and country setup.",
+      "version": "1.0.0",
       "category": "accounting",
       "keywords": [
+        "erp",
+        "accounting",
+        "general-ledger",
+        "financial-reports",
+        "budget",
         "cost-allocation",
-        "departments",
-        "projects",
-        "dimensions"
+        "reconciliation",
+        "migration",
+        "period-close",
+        "mcp"
       ]
     },
     {
-      "name": "arfiti-ee-country-pack",
-      "source": "./arfiti-ee-country-pack",
+      "name": "arfiti-ee",
+      "source": "./arfiti-ee",
       "description": "Estonia country pack: VAT return (KMD) and EC Sales List, payroll and TSD, annual report with XBRL, and year-end bookkeeping.",
-      "version": "1.0.8",
+      "version": "1.0.0",
       "category": "compliance",
       "keywords": [
         "estonia",
@@ -71,65 +50,6 @@
         "bookkeeping",
         "reconciliation",
         "period-close"
-      ]
-    },
-    {
-      "name": "arfiti-core-implementation-consultant",
-      "source": "./arfiti-core-implementation-consultant",
-      "description": "ERP implementation consultant. Guides customers through migration: chart of accounts, opening balances with open transactions, master data import, gap period transaction processing, and go-live verification.",
-      "version": "2.0.4",
-      "category": "accounting",
-      "keywords": [
-        "migration",
-        "onboarding",
-        "implementation",
-        "opening-balance",
-        "data-import",
-        "go-live"
-      ]
-    },
-    {
-      "name": "arfiti-core-agent-procedures",
-      "source": "./arfiti-core-agent-procedures",
-      "description": "The procedures Arfiti's own agents follow: bills, bank and card lines, payment reconciliation, vendors and customers, configuration, expense claims, period close and billing usage, for your own Claude or Cowork through the Arfiti MCP server.",
-      "version": "1.0.7",
-      "category": "accounting",
-      "keywords": [
-        "bills",
-        "bank-reconciliation",
-        "payment-matching",
-        "expenses",
-        "period-close",
-        "agent-procedures"
-      ]
-    },
-    {
-      "name": "arfiti-core-country-setup",
-      "source": "./arfiti-core-country-setup",
-      "description": "Configure a live Arfiti company for its country through the Arfiti connector: tax codes, authorities, registrations, filing calendars, withholding, payroll taxes and expense rates, researched from official sources, confirmed with you, applied through the submit gateway and read back. Also helps author your own country payroll and VAT plugins.",
-      "version": "3.0.3",
-      "category": "configuration",
-      "keywords": [
-        "onboarding",
-        "country",
-        "tax",
-        "payroll",
-        "configuration",
-        "withholding"
-      ]
-    },
-    {
-      "name": "arfiti-core-erp",
-      "source": "./arfiti-core-erp",
-      "description": "Core operating skill for the Arfiti ERP: post, query, report and run workflows through the Arfiti MCP connector, with a domain guide for each area of the ledger.",
-      "version": "2.0.144",
-      "category": "accounting",
-      "keywords": [
-        "erp",
-        "accounting",
-        "general-ledger",
-        "mcp",
-        "workflows"
       ]
     }
   ]

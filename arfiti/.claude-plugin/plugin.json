@@ -1,0 +1,28 @@
+{
+  "name": "arfiti",
+  "description": "The Arfiti finance system inside Claude: the Arfiti connector, the operating guide to its tools, the procedures Arfiti's own agents follow, financial reports, budgets, cost allocation, migration from another system and country setup.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": {
+    "name": "Arfiti",
+    "email": "support@arfiti.com",
+    "url": "https://arfiti.com"
+  },
+  "homepage": "https://arfiti.com/plugins/arfiti",
+  "documentationUrl": "https://arfiti.com/plugins/arfiti",
+  "privacyPolicyUrl": "https://arfiti.com/legal/privacy",
+  "termsOfServiceUrl": "https://arfiti.com/legal/terms",
+  "icon": "./assets/icon.png",
+  "keywords": [
+    "erp",
+    "accounting",
+    "general-ledger",
+    "financial-reports",
+    "budget",
+    "cost-allocation",
+    "reconciliation",
+    "migration",
+    "period-close",
+    "mcp"
+  ]
+}

@@ -1,0 +1,195 @@
+---
+name: prepare-vat-declaration
+description: Prepare and validate the monthly Estonian VAT return (KMD) for e-MTA — runs the pre-close validation gate, then generates the KMD2 machine CSV + XSD-validated XML and the KMD INF annex. Hands off the EC Sales List to /prepare-ec-sales-list when intra-EU supplies exist. Run with `validate` to check only.
+---
+
+# Estonian VAT Return (KMD)
+
+The **single** command for the monthly VAT close. It runs the pre-close validation gate,
+and only if nothing is blocking does it generate the filing. Everything — the KMD main
+form, KMD INF A/B, and the EC Sales List (Form VD) — happens here.
+
+## Usage
+
+```
+/arfiti-ee:prepare-vat-declaration            # full run: gate → generate → file
+/arfiti-ee:prepare-vat-declaration validate   # run the gate only, then stop
+```
+
+`validate` runs Phases 1–3 (the gate) and stops with the pass/fail report — nothing is
+generated. Use it to check early, or to re-check after corrections.
+
+## Prerequisites
+
+- All transactions for the period posted (no drafts); all lines have tax codes.
+- Python 3.9+ available (`python3 --version`).
+
+---
+
+## Phase 1 — Gather (SKILL steps 1–3)
+
+Follow **skills/estonian-vat-declaration/SKILL.md**:
+0. Establish whether the entity is on cash accounting (`cash_accounting`), and resolve the
+   registered VAT form code with `query("tax_filing_form", filters={"country_code": "EE"})`
+   (Estonia: `KMD`). No registered form → the return cannot be saved; say so (SKILL Prerequisites).
+1. Discover & classify tax codes (property-based — never hardcode names).
+2. Take the box figures from `generate_report("vat_report", …)` (authoritative) and fetch
+   the period's documents in every ledger-effective status — `posted`, `partial`, `paid`,
+   `partially_paid`, `completed`, `approved`, `reversed`, with `posted_at` set, plus the
+   reversals dated in the period — never `status: "posted"` alone, which drops paid
+   documents. Convert foreign-currency amounts to EUR with the header `exchange_rate`,
+   re-read any response warned "Line items truncated", pass each reversal of an AR/AP
+   invoice as a cancellation entry (the original's figures, `original_invoice_number`
+   through `reversal_of_id`, `cancellation.reason` only as the person says) and list
+   voided documents for the person (SKILL Step 2, item 3).
+   Build each invoice's figures from its `line_role: "document"` lines only — never the
+   generated `control` row an AP invoice returns among its lines (it is the whole
+   document total; counting it turns a 1,000 net bill into 2,240) — and pass the header
+   `amount` as `gross_amount`. Before using the figures: per document, net + VAT −
+   reverse-charge VAT must equal the header total, signed (the selector refuses otherwise); per
+   direction, the taxed nets of every ap / ar document inside the VAT registration must
+   equal `vat_report`'s taxable bases; and any AP invoice whose header carries `metadata.accrual_reversal` (bills posted before AR-1444 only) goes to a person. A
+   mismatch stops the preparation with the documents that differ (SKILL Step 2). An
+   invoice whose amounts do not carry one sign comes back under `sign_review` and goes to
+   a person; it is neither declared nor counted toward the limit. So do invoices whose
+   `line_nets` carry both signs, except a multi-rate sales invoice whose negative amounts
+   are whole rate groups (code 03, EMTA's part A example), a single-rate sales invoice
+   (one row, no code) and an ordinary part B invoice (one row, net amounts) — the last
+   two are AR-1439 recommended treatments. A cancelled purchase invoice always goes to a
+   person. Also to a person: an ordinary purchase invoice with a
+   minus sign, and an ordinary sales invoice with a negative total that does not refer
+   to an original invoice (`original_invoice_number`). Cancellations the AR-1439
+   treatments do not settle come back under `cancellation_review`. Cross-border reverse-charge bills
+   (`cross_border_reverse_charge`) are not shown in KMD INF; with supplier VAT on the
+   same bill they go to `reverse_charge_review`.
+   List supplier invoice numbers that already appear for the same supplier in a filed
+   period (SKILL Step 2.5) for a person to review — never excluded automatically.
+3. Verify every `document` line has a valid tax code (a `control` line never has one).
+
+## Phase 2 — Pre-close validation gate (BLOCK / WARN)
+
+Run **every** check in **skills/estonian-vat-declaration/references/validation-checklist.md**
+and emit the single pass/fail report:
+
+1. Output-format validation — enforced by `generate_kmd.py` in Phase 5 (listed here for completeness)
+2. Completeness — payments without a document — **BLOCK**
+3. Period basis / cut-off — **WARN**
+4. Tax-code coverage & jurisdiction sanity — **BLOCK** on missing, **WARN** on mismatch
+5. GL tie-out vs. the trial balance — **BLOCK** on material difference
+6. INF threshold / annex consistency — **BLOCK**
+7. Arithmetic / form rules — **BLOCK**
+
+**If any BLOCK is open: STOP. Print the report and the fix list. Do not generate.**
+WARN items are listed for the reviewer to confirm but do not stop the run.
+
+> **If invoked as `validate`: stop here** and present the report. Do not proceed.
+
+## Phase 3 — Build the KMD data (SKILL steps 4–5)
+
+Once the gate is green (no open BLOCK):
+
+- Compute `declaration_body` with **real KMD2 element names**: bases by rate — with
+  reverse-charge/IC acquisition bases INCLUDED in the rate lines — plus `inputVatTotal`
+  (incl. the deductible RC VAT) and the informative acquisition breakout on lines 6/7.
+  Do **not** supply total VAT / line 12 / line 13 — e-MTA computes them.
+- Select KMD INF partners with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/generate_kmd.py" --select-inf … --side A|B`
+  (invoices **without VAT** at least EUR 1,000.00 per partner, inclusive) and build
+  `sales_annex` / `purchases_annex` invoice by invoice. Partners without a verified
+  register code go to a person; never use the VAT number. A code-03 invoice gets one
+  line per `rate_rows` entry; a § 41¹ seller line carries code 02 with column 9 empty
+  (the generator warns otherwise), a § 41¹ buyer line code 12 (skill Step 5).
+
+Build the input JSON (see `scripts/input_schema_kmd.json` for the full example):
+
+```json
+{
+  "regcode": "REGCODE",
+  "submitter_person_code": null,
+  "year": YYYY, "month": MM, "declaration_type": 1,
+  "input_vat_full_deduction": true,
+  "cash_accounting": false,
+  "expected_vat_payable": 138.07,
+  "declaration_body": {
+    "transactions24": 910.00, "inputVatTotal": 80.33,
+    "euAcquisitionsGoodsAndServicesTotal": 36.64,
+    "acquisitionOtherGoodsAndServicesTotal": 50.00
+  },
+  "sales_annex": {"sum_per_partner": false, "lines": [ ... ]},
+  "purchases_annex": {"sum_per_partner": false, "lines": [ ... ]}
+}
+```
+
+- Pass `expected_vat_payable` (or `expected_vat_overpaid`) — the figure you derived from
+  the GL tie-out — so the generator asserts its computation matches (check 1).
+- Set `input_vat_full_deduction: false` if the taxpayer's input VAT is only partly
+  deductible; line 5 then carries only the deductible portion while line 4 still
+  self-assesses the full reverse-charge VAT — the generator warns to review the split.
+- Set `cash_accounting` from the entity's VAT setup. Only a cash-accounting entity fills
+  `invoiceSumForRate` (part A col 8) and `vatSum` (part B col 7); the generator refuses
+  them otherwise (part B special code 11 excepted).
+- Omit an annex entirely when no partner reaches EUR 1,000 (the generator sets
+  `noSales` / `noPurchases` = true).
+
+## Phase 4 — EC Sales List (Form VD) hand-off, only if intra-EU B2B supplies exist
+
+Check whether the period has zero-rated supplies to EU VAT-registered customers
+(KMD line 3.1 — `euSupplyInclGoodsAndServicesZeroVat` — non-zero, or triangular
+resales exist). If so, the **EC Sales List (Form VD)** is due — a **separate** e-MTA
+declaration with its own format. Tell the user to run
+**`/arfiti-ee:prepare-ec-sales-list`** for it (it reconciles VD goods = line 3.1.1 and
+VD services = line 3.1 − 3.1.1). If there are no IC supplies, state that Form VD is not
+required. Form VD is intentionally its own command because it is a distinct filing, not
+part of the KMD2 dataset.
+
+## Phase 5 — Generate
+
+```bash
+# The generator ships in this plugin's scripts/ folder.
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/generate_kmd.py" --input /tmp/kmd_data_{REGCODE}_{YYYYMM}.json --output {OUTPUT_DIR}
+```
+
+If `${CLAUDE_PLUGIN_ROOT}` is not set in your shell, use the folder this plugin is installed in (ask the user for it); never search their home folder.
+
+The script re-runs the **output-format gate** (check 1) on its own output and **refuses
+to write files** on any failure: it validates the XML against the bundled
+`vatdeclaration.xsd`, mechanically checks the CSV (31 fields/row, correct version, dot
+decimals, TRUE/FALSE, CRLF), and asserts the derived figures (incl. any `expected_*`).
+On success it writes:
+
+- `KMD_YYYYMM_{REGCODE}.csv` — KMD2 machine CSV (fixed 31-field rows), **primary**.
+- `vatDeclaration_YYYYMM_{REGCODE}.xml` — full KMD2 XML (main form + INF A/B), secondary.
+
+## Phase 6 — Record & post to the ERP (SKILL steps 8–9)
+
+- `submit(object_type="tax_return", operation="create", …)` with `return_data.declaration_body` (+ annexes,
+  summaries). Report the `tax_return_id`.
+- Post the VAT closing journal entry (net to VAT Payable / Receivable).
+- When Line 12 > 0: post the EMTA settlement bill (SKILL step 9b) — DR VAT
+  Payable / CR AP to the tax-authority vendor, due the 20th of the following
+  month. The bank payment then applies to it automatically; without the bill
+  the payment dangles on AP with nothing to settle.
+
+## Phase 7 — File & confirm
+
+1. Log in to **e-MTA** (maasikas.emta.ee), Declarations → KMD, select the period.
+2. "Laadi fail" → upload `KMD_YYYYMM_{REGCODE}.csv` (or the XML — both carry the main
+   form and the INF partners). If Form VD applies, file it separately.
+3. Portal validates → sign digitally → submit. **Deadline: 20th of the following month.**
+4. After filing: `submit(object_type="tax_return", operation="file", data=JSON.stringify({"return_id": …, "confirmation_number": …}))` —
+   this also transitions the tax reporting period to `filed`.
+5. **Lock the period** so the filed return keeps matching the ledger:
+   `submit(object_type="tax_period", operation="lock", data=JSON.stringify({"period_id": <reporting_period_id>, "reason": "KMD filed — conf# …"}))`.
+   Ask the user first; to amend later, `submit(object_type="tax_period", operation="unlock", …)`, correct, re-file, re-lock.
+   The Reports → Sales tax reconciliation panel flags any ledger-vs-return drift either way.
+
+> **Payment note:** check the e-MTA prepayment account (ettemaksukonto) first — a
+> positive balance from payroll taxes may reduce the actual transfer below KMD line 12.
+
+## Output
+
+- Pre-close gate report (Phase 2) with PASS / WARN / BLOCK per check.
+- `KMD_YYYYMM_{REGCODE}.csv` (primary) + `vatDeclaration_YYYYMM_{REGCODE}.xml` (secondary).
+- A hand-off to `/prepare-ec-sales-list` when IC supplies exist (Form VD is filed separately).
+- Tax return record + VAT closing journal entry, with the `tax_return_id`.
+
+- When Line 13 > 0: complete SKILL Step 9c, preserve the saved return data, track the refund open item, and report cumulative unclaimed refunds until verified receipt or offset.
