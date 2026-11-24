@@ -386,8 +386,8 @@ gross, send `is_tax_inclusive: true` on those lines.
 ```
 
    Send `unit_price` only when quantity times unit price equals the amount.
-   Do not send `metadata.bill_candidate` or `reviewed_total`: those switch the
-   executor into the reviewed-draft path, which these tools do not use.
+   Do not send `metadata.bill_candidate`: it belonged to the removed built-in
+   bill agent's reviewed-draft path and is refused.
 3. `submit(object_type="transaction", operation="post", data=payload, validate_only=true)`. Fix what the
    errors name from the document and the records; if an error needs a fact you
    do not have, ask. Never "fix" by changing a value the document states.

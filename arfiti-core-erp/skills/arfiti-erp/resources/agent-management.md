@@ -85,7 +85,7 @@ workflow authority remain separate controls.
 
 | Agent Type | Description | Mode | Key Workflows |
 |------------|-------------|------|---------------|
-| `bill_processor` | Processes vendor bills and owned review replies through the sole saga runtime. | pipeline | `transaction.post`, `vendor.create`, `fixed_asset.acquire_from_bill` |
+| `bill_processor` | Processes vendor bills. Run by a managed agent; the built-in runtime is removed. | managed | `transaction.post`, `vendor.create`, `fixed_asset.acquire_from_bill` |
 | `reconciliation_agent` | Matches AP/AR and card purchases; unresolved purchases can enter optional, opt-in durable evidence investigation. | pipeline | Existing reconciliation/settlement workflows and validators |
 | `master_data_agent` | Centralized vendor/customer creation. Handles requests from other agents, searches for duplicates. | llm | `vendor.create`, `customer.create`, `vendor.update`, `customer.update` |
 | `bank_transaction_processor` | Processes bank and corporate-card feeds | pipeline | Posting, source match/exclusion and review workflows |
@@ -94,7 +94,7 @@ workflow authority remain separate controls.
 | `payment_proposal_agent` | Proposes payment batches for approval | pipeline | varies |
 | `configuration_agent` | Handles system configuration tasks | llm | varies |
 
-Since 11 November 2026 (AR-1187): `asset_creator`, `agent_architect` and the Estonian country agents are retired (create a fixed asset with `submit(object_type="fixed_asset", operation="acquire_from_bill", …)`; an `asset_creation` task is refused with that sentence, because nothing would pick it up; a failed run emails the admins). `bill_processor`, `bank_transaction_processor`, `reconciliation_agent`, `master_data_agent`, `configuration_agent`, `expense_processor` and `period_close_agent` are run by managed agents: where the row already exists the built-in runtime keeps running until the row is set to the managed runtime, except for `bank_transaction_processor` and `expense_processor`, whose built-in pipelines are removed (a run of either on the built-in runtime is refused and says to set the runtime to managed); a new organisation gets the row switched off and marked `config.runtime = "managed"` (Mode "Managed" in the dashboard; enabling it is refused). `stripe_transaction_processor` is not created in a new organisation and is not shown in the agent list. `bills_collector_agent` and `payment_proposal_agent` are automations (fixed logic). Full list: the agent catalog guide.
+Since 11 November 2026 (AR-1187): `asset_creator`, `agent_architect` and the Estonian country agents are retired (create a fixed asset with `submit(object_type="fixed_asset", operation="acquire_from_bill", …)`; an `asset_creation` task is refused with that sentence, because nothing would pick it up; a failed run emails the admins). `bill_processor`, `bank_transaction_processor`, `reconciliation_agent`, `master_data_agent`, `configuration_agent`, `expense_processor` and `period_close_agent` are run by managed agents: where the row already exists the built-in runtime keeps running until the row is set to the managed runtime, except for `bank_transaction_processor`, `expense_processor`, `reconciliation_agent`, `period_close_agent` and `bill_processor`, whose built-in pipelines are removed (a run of either on the built-in runtime is refused and says to set the runtime to managed); a new organisation gets the row switched off and marked `config.runtime = "managed"` (Mode "Managed" in the dashboard; enabling it is refused). `stripe_transaction_processor` is not created in a new organisation and is not shown in the agent list. `bills_collector_agent` and `payment_proposal_agent` are automations (fixed logic). Full list: the agent catalog guide.
 
 ## How the managed agents work, and working beside them
 
@@ -638,14 +638,15 @@ submit(object_type="agent_request", operation="update", data=JSON.stringify({
   To decline the task instead, send `status: "cancelled"` without
   `response_data`. This is the same call the task page makes. The agent that
   asked reads `response_data.selected_option` and `response_data.notes`.
-- `owner_agent_type` is set (a built-in agent's task, such as a Bill review
-  with `owner_agent_type` `"bill_processor"` and `request_data.action`
-  `"review_bill"`): answer with `agent_request.respond`, as described under
-  Request Flow: answer the task's current question (its newest request a
+- `owner_agent_type` is set (a built-in agent's task): answer with
+  `agent_request.respond`, as described under Request Flow: answer the task's current question (its newest request a
   person answers, which may be a follow-up question in the same task) with
   that request's `id` and `version`. If
   `respond` refuses with a sentence naming `update`, the task is a review task:
-  use the call above.
+  use the call above. An old Bill review (`owner_agent_type`
+  `"bill_processor"`, `request_data.action` `"review_bill"`) takes no answer:
+  the built-in bill agent is removed (P-AR-42), so cancel it with the
+  `status: "cancelled"` call above.
 - Only a person answers a review task. An agent sending a status or
   `response_data` is refused, the agent that raised it included; it may only
   cancel a task it raised itself.

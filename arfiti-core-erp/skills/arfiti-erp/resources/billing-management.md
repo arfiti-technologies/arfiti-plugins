@@ -1550,8 +1550,9 @@ withhold the review and its reachable thread before totals or pagination.
 The shared graph also checks workflow payload request references and stored
 object-link metadata. Transaction links must resolve in the same entity under
 the reader's existing transaction permissions; payment-batch links retain the
-existing batch policy. A producer `metadata.bill_candidate` stamp follows its
-`draft_id` and `revision` through the same draft checks. Readable self/mutual
+existing batch policy. A `metadata.bill_candidate` stamp on a historical row (the
+removed built-in bill agent wrote it; new submissions carrying it are refused)
+follows its `draft_id` and `revision` through the same draft checks. Readable self/mutual
 request/draft/workflow cycles terminate without being denied merely for cycling.
 Response review metadata and virtual execution metadata use the same rules.
 
