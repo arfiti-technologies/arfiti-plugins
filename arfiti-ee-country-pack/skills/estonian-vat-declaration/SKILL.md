@@ -215,11 +215,19 @@ drop the original because it was later reversed.
    - `gross_amount` = the header `amount` (the document total the supplier is owed or
      the customer owes);
    - `has_positive_rate_supply` = any line whose tax code's `default_rate` is 24, 22,
-     20, 13, 9 or 5. A **sales** line on a § 41¹ code (`is_reverse_charge: true`,
-     `tax_scope: "domestic"`) is declared by EMTA with the rate in column 7 (part A
-     example: 24 %, code 02). If that code's `default_rate` is one of those rates, use
-     it; if it is 0 or empty, the rate cannot be read from the code: keep the invoice
-     out of the selector and list it for the person (never assume 24);
+     20, 13, 9 or 5. § 41¹ invoices (`is_reverse_charge: true`, `tax_scope:
+     "domestic"`) are reported and count toward the limit at their total without VAT,
+     sales and purchases separately, credit invoices not netted. That is by
+     construction: the annex reports them and the limit counts reported invoices; no
+     sentence in the sources names § 41¹ in the limit. A **sales** line on a § 41¹ code
+     is declared by EMTA with the rate in column 7 (part A example: 24 %, code 02). If
+     that code's `default_rate` is one of those rates, use it; if it is 0 or empty, the
+     rate cannot be read from the code: keep the invoice out of the selector and list it
+     for the person (never assume 24). Cautionary rule, outside the six AR-1439
+     treatments: the same holds for a **purchase** line on such a code, because with
+     `has_positive_rate_supply` false the selector would exclude the bill as "no supply
+     at 24/22/20/13/9/5 %", and a reportable § 41¹ purchase would silently drop out of
+     part B and out of the supplier's total;
    - `line_nets` = one `{"rate": …, "net_amount": …}` per line, always: `rate` is the
      line's tax code `default_rate` as returned ("24", "24.00" and 24 are all read as
      24) when it is above zero, `null` for a 0 %, exempt or untaxed line (never "0":
@@ -309,27 +317,72 @@ drop the original because it was later reversed.
      Do not use such an invoice's net either way; list it, with the amount reversed,
      for the person to decide.
 
-3. **Reversed and voided documents of the period — review list.** A reversal carries
-   no document lines and no customer or vendor of its own, and `vat_report` nets it
-   against the reversed invoice. A voided document was never posted (only an unposted
-   document can be voided), so it was never in the ledger figures; it is listed only so
-   the person sees what was withdrawn.
-   How a reversed or voided invoice is shown in the KMD INF is not settled here. What
-   the sources do settle: a cancellation after the return was filed is reflected in the
-   period of the cancellation, like a credit invoice (VAT Act § 29(7)), and an invoice
-   declared by mistake is re-entered with zero amounts (KMD INF instructions,
-   "Correcting the KMD INF form"). Not settled: a later-period cancellation without a
-   credit-invoice document, an invoice issued and voided in the same period, and an
-   invoice voided by mistake (original period or current period). List them separately
-   for a person to decide, and do not add or remove annex lines for them on your own:
+3. **Reversed and voided documents of the period — cancellation entries.** A reversal
+   carries no document lines and no customer or vendor of its own, and `vat_report`
+   nets it against the reversed invoice. A voided document was never posted (only an
+   unposted document can be voided), so no turnover was declared for it and it has no
+   annex row; list it for the person only so they see what was withdrawn (if a payment
+   was received or goods were delivered against it, the person decides).
+   Each reversal dated in the period of an AR or AP invoice is a cancellation without a
+   credit invoice. If the reversed invoice also has a credit memo dated in another
+   period (a credit memo whose header `metadata.original_transaction_id` is the
+   invoice), do not pass the reversal: list it, the invoice and the credit memo for the
+   person. Otherwise pass it to the selector (Step 5) as a **cancellation entry**: the
+   reversed invoice's `partner_key`, partner fields, `document_type`, `net_amount`,
+   `vat_amount`, `gross_amount`, `line_nets` (and for part B `vat_deducted_in_period` =
+   the input VAT this reversal takes out of line 5) **as stored on that invoice**
+   (positive), the reversal's own `transaction_number` as `invoice_number` and its date
+   as `invoice_date`, plus:
+   - `original_invoice_number` = the reversed invoice's number as you put it in the
+     invoice list (its `transaction_number` for part A, its `reference_number` for
+     part B), read through the reversal's `reversal_of_id`. That link is the reversal's
+     own reference to the original. **Your obligation for every
+     `original_invoice_number`** (cancellation entries, credit memos, negative sales
+     invoices): it is a link recorded in the ledger to an existing invoice of the same
+     partner (`reversal_of_id`, a header's `metadata.original_transaction_id`), or what
+     the person reads on the document itself. Never type it from memory, infer it from a
+     similar number or an equal amount, or take it from another partner's invoice. On
+     each credit memo in the list, pass its `metadata.original_transaction_id`
+     invoice's number the same way, so the selector can see an invoice that is both
+     credited and cancelled;
+   - `cancellation.original_invoice_date` = the reversed invoice's date;
+   - `cancellation.reason` = what the person says: `"transaction_cancelled"` (the
+     transaction itself was cancelled) or `"issued_in_error"` (the invoice should never
+     have been issued). Show them the reversal's description (it holds the reversal
+     reason) but never set the reason yourself; until they answer, pass `null`;
+   - `cancellation.turnover_arose` (only for an invoice issued in this same period):
+     `false` only when **both** are confirmed: nothing was supplied (the person says so)
+     **and** no payment was ever received for the invoice. `amount_paid` does not show
+     the second: the ledger refuses to reverse an invoice with a live payment
+     application, so a payment is unmatched first and a reversed invoice reads
+     `amount_paid` 0 even when money came in. Confirm it from the payment history (any
+     payment ever applied to the invoice, matched and later unmatched included) or from
+     the person. `true` when either happened; `null` when either is not confirmed.
+   What the selector then does (references/kmd-inf-annex.md): a **sales** invoice's
+   cancellation in a later period that refers to the original and cancels the
+   transaction is a part A minus row in this period, like a credit invoice (VAT Act
+   § 29(7)); a sales invoice issued and cancelled in this period is left out together
+   with its cancellation when no turnover arose and their figures match. Every other
+   case goes to `cancellation_review` for the person: an invoice issued by mistake
+   (corrected in its own period, § 27(5)), two cancellations of one invoice, an invoice
+   that any other document in the list also refers to (a credit memo, a reduction or
+   replacement invoice), a reversal of a credit memo, and **every
+   cancelled purchase invoice** (the buyer reflects it in the cancellation period,
+   § 29(7), but part B takes a minus sign only on a received credit invoice or in the
+   § 29¹(4) case). When a cancellation goes there, every entry linked to it by a
+   reference (the invoice, its credit memos, other cancellations) goes there with it, so
+   a person decides them together; a cancellation without a reference names nothing,
+   and the invoice it may cancel can still be declared: tell the person. The reversals are the ones dated in the period (the `reversal_of_id`
+   query above), each read with the document it reverses
+   (`get_entity("transaction", id=<reversal_of_id>, include_related=true)`). The
+   reversed originals dated in this period are already in the invoice list (`reversed`
+   is a ledger-effective status); the voided documents come from:
    ```
    query("transaction", filters={"legal_entity_id": ID,
        "transaction_type": ["AR_INVOICE", "AR_CREDIT_MEMO", "AP_INVOICE", "AP_CREDIT_MEMO"],
        "status": ["reversed", "void", "voided"]},
        date_filters={"transaction_date": {"from": "YYYY-MM-01", "to": "YYYY-MM-DD"}})
    ```
-   plus the reversals dated in the period (the `reversal_of_id` query above), each with
-   the document it reverses.
 
 **Which source wins.** The `vat_report` totals are authoritative for the KMD box
 figures: they are the ledger's canonical tax computation, shared with the dashboard
@@ -485,6 +538,18 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
    `reverse_charge_review`, as does an `import_reverse_charge` bill. An invoice with a
    line rate outside 24/22/20/13/9/5 goes to `rate_review`. A code-03
    candidate whose VAT does not equal Σ rate-group net × rate goes to `sign_review`.
+   An ordinary sales invoice whose lines of both signs share **one** rate (no 0 %/exempt
+   line, VAT = net × rate) is declared as one row with its net, no special code
+   (AR-1439 recommended treatment); a part B invoice with lines of both signs is declared
+   as one row with its net total and net deducted VAT (an ordinary invoice only: a
+   purchase credit memo with lines of both signs goes to `sign_review`). An ordinary sales invoice with a
+   negative total is declared as a minus row only when it carries
+   `original_invoice_number`: the invoice it amends, from a link recorded on the
+   document (its header `metadata.original_transaction_id` from `get_entity`, when
+   set) or as the person reads it on the document. Never derive it from a similar
+   number or an equal amount; without it the invoice goes to `sign_review`.
+   Cancellation entries (Step 2, item 3) come back declared as minus rows, `excluded`
+   with their original, or under `cancellation_review`.
    `lines_not_checked` and `gross_not_checked` must be empty: pass `line_nets` for
    **every** invoice. The selector cannot tell whether an invoice passed without them
    has more than one rate or a negative line; it declares it as one ordinary row and
@@ -512,10 +577,18 @@ Following **references/kmd-inf-annex.md** (rules from EMTA's KMD INF instruction
    - **Code 03 invoice** (returned with `rate_rows`): one line per `rate_rows` entry,
      `invoiceSum` = `signed_net_amount` on every line, `taxRate` = its `tax_rate`,
      `sumForRateInPeriod` = its `net_amount` (signed: −500 stays −500) when the whole
-     supply falls in this period, `comments` = "03". For other invoices with supply at
+     supply falls in this period, `comments` = "03" when `special_codes` holds it. A
+     single-rate invoice with lines of both signs comes back with one `rate_rows` entry
+     and empty `special_codes`: one line, no comment. For other invoices with supply at
      two or more rates or with 0 %/exempt parts the sources conflict: the instructions
      (part A column 10) give code 03, but EMTA's first part A example (1500 = 24 % 500
      + 9 % 1000, two rows) shows no code. Put the case to the person; do not choose.
+   - **Cancellation row** (a declared cancellation entry, part A only): `invoiceNumber`
+     = the reversal's own `transaction_number` (the entry's `invoice_number`),
+     `invoiceDate` = the reversal's date (the entry's `invoice_date`), `invoiceSum` =
+     `signed_net_amount` (negative), one line per rate group with `sumForRateInPeriod`
+     = minus that rate group's net, the original invoice's codes. The original's number
+     is not a column; keep it (`original_invoice_number`) with the working papers.
    - **§ 41¹ seller** (domestic reverse-charge code on a sales line): `invoiceSum` = the
      total without VAT, `taxRate` = the rate, `sumForRateInPeriod` **empty**, `comments`
      = "02" (the supply goes to KMD line 9, `supplySpecialArrangements`). The generator
@@ -541,10 +614,10 @@ When no partner reaches the threshold, omit the annex — the generator sets
 
 **CP4 checkpoint**: Part A column 9 per rate ≤ the KMD rate lines, part B column 8 ≤
 `inputVatTotal`; explain the difference by cause (partners below the threshold, natural
-persons, excluded invoices, `sign_review`, `reverse_charge_review`). Present the
-`needs_registry_code`, `sign_review` and `reverse_charge_review` lists, and the
-reversed / voided documents from Step 2, and stop for the person's answer before
-filing.
+persons, excluded invoices, `sign_review`, `reverse_charge_review`,
+`cancellation_review`). Present the `needs_registry_code`, `sign_review`,
+`reverse_charge_review` and `cancellation_review` lists, and the voided documents from
+Step 2, and stop for the person's answer before filing.
 
 ### Step 6: Prepare EC Sales List (Form VD)
 

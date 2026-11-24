@@ -38,8 +38,10 @@ Follow **skills/estonian-vat-declaration/SKILL.md**:
    `partially_paid`, `completed`, `approved`, `reversed`, with `posted_at` set, plus the
    reversals dated in the period — never `status: "posted"` alone, which drops paid
    documents. Convert foreign-currency amounts to EUR with the header `exchange_rate`,
-   re-read any response warned "Line items truncated", and list reversed and voided
-   documents for a person to decide (SKILL Step 2).
+   re-read any response warned "Line items truncated", pass each reversal of an AR/AP
+   invoice as a cancellation entry (the original's figures, `original_invoice_number`
+   through `reversal_of_id`, `cancellation.reason` only as the person says) and list
+   voided documents for the person (SKILL Step 2, item 3).
    Build each invoice's figures from its `line_role: "document"` lines only — never the
    generated `control` row an AP invoice returns among its lines (it is the whole
    document total; counting it turns a 1,000 net bill into 2,240) — and pass the header
@@ -50,9 +52,14 @@ Follow **skills/estonian-vat-declaration/SKILL.md**:
    mismatch stops the preparation with the documents that differ (SKILL Step 2). An
    invoice whose amounts do not carry one sign comes back under `sign_review` and goes to
    a person; it is neither declared nor counted toward the limit. So do invoices whose
-   `line_nets` carry both signs (except a multi-rate sales invoice whose negative amounts
-   are whole rate groups, declared with code 03 per EMTA's part A example) and an
-   ordinary purchase invoice with a minus sign (negative deduction or negative total). Cross-border reverse-charge bills
+   `line_nets` carry both signs, except a multi-rate sales invoice whose negative amounts
+   are whole rate groups (code 03, EMTA's part A example), a single-rate sales invoice
+   (one row, no code) and an ordinary part B invoice (one row, net amounts) — the last
+   two are AR-1439 recommended treatments. A cancelled purchase invoice always goes to a
+   person. Also to a person: an ordinary purchase invoice with a
+   minus sign, and an ordinary sales invoice with a negative total that does not refer
+   to an original invoice (`original_invoice_number`). Cancellations the AR-1439
+   treatments do not settle come back under `cancellation_review`. Cross-border reverse-charge bills
    (`cross_border_reverse_charge`) are not shown in KMD INF; with supplier VAT on the
    same bill they go to `reverse_charge_review`.
    List supplier invoice numbers that already appear for the same supplier in a filed

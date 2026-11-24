@@ -159,14 +159,33 @@ is worth the whole document total and must never be added.
 - Any invoice in `sign_review` — **BLOCK** until a person decides how it is presented;
   it was neither declared nor counted toward the limit. It holds: amounts of mixed sign
   (an edited bill with a negative net and a positive total, a credit memo whose lines
-  sum below zero); lines of both signs that EMTA's text does not settle (a negative line
-  at a single rate or at 0 %/exempt, a negative total, a credit memo, any part B
-  invoice); and an ordinary purchase invoice with a minus sign (negative
+  sum below zero); an ordinary sales invoice with a negative total that does not refer
+  to an original invoice (AR-1439 rule 5); lines of both signs that neither EMTA's text
+  nor the AR-1439 treatments settle (on a multi-rate sales invoice a rate with both
+  signs, a negative 0 %/exempt line, a single-rate invoice with a 0 %/exempt part or
+  VAT not equal to net × rate, a negative multi-rate total, a sales credit memo); and
+  an ordinary purchase invoice with a minus sign (negative
   `vat_deducted_in_period` or negative total) (part B takes a minus sign only on a credit invoice or an invoice unpaid under VAT Act
   § 29¹(4); a person decides which, the tool cannot). A multi-rate sales invoice whose
   negative amounts are whole rate groups is **not** here: EMTA settles it (code 03, one
   row per rate, signed column 9, column 6 repeated; part A example 1500 = 24 % 2000 and
-  9 % −500) and the selector declares it with `rate_rows`.
+  9 % −500) and the selector declares it with `rate_rows`. Nor are a single-rate sales
+  invoice with lines of both signs (one row, no code) or an ordinary part B invoice
+  with lines of both signs (one row, net amounts): AR-1439 recommended treatments,
+  declared. A purchase credit memo with lines of both signs **is** here.
+- Any entry in `cancellation_review` — **BLOCK** until a person decides: a cancellation
+  without a reference to the original invoice, one whose reason (cancelled transaction
+  or invoice issued by mistake) is not recorded, an invoice issued by mistake (correct
+  the original period, VAT Act § 27(5), nothing in this period), a sales invoice issued
+  and cancelled in this period where turnover arose or is not confirmed absent, or
+  whose cancellation's figures differ, two cancellations of one invoice, an invoice
+  that any other document (credit memo, reduction or replacement invoice) also refers to, a
+  cancellation of a credit memo, and **every cancelled purchase invoice**. The invoice
+  a reviewed cancellation names, and every other document in the list that refers to
+  that invoice, are listed there too (neither declared nor left out until
+  the person decides). Not declared, not counted
+  toward the limit. A cancellation without a reference names no invoice: check whether
+  the invoice it cancels was declared, and show both to the person.
 - Any invoice in `reverse_charge_review` (cross-border reverse charge on a bill that
   also carries supplier VAT) — **BLOCK** until a person decides. Plain cross-border
   reverse-charge bills (intra-Community acquisitions, services from abroad) are
@@ -190,11 +209,15 @@ is worth the whole document total and must never be added.
 - Any partner in `needs_registry_code` — **BLOCK** until a person supplies a verified
   register code or confirms the partner is a non-resident without one. Never fill it
   from a VAT number.
-- Reversed and voided documents of the period (SKILL Step 2, item 3) — **WARN**: list
-  them for a person to decide how they appear in the annex. Not settled by the
-  official text: a later-period cancellation without a credit-invoice document, an
-  invoice issued and voided in the same period, an invoice voided by mistake (original
-  period or current period).
+- Every reversal of an AR/AP invoice dated in the period is passed to the selector as a
+  cancellation entry (SKILL Step 2, item 3) — **BLOCK** if one is missing: its minus row
+  (later period) or the omission of the pair (same period) depends on it. A
+  `turnover_arose: false` that rests on `amount_paid` alone — **BLOCK**: a reversed
+  invoice always reads 0 there (payments are unmatched before a reversal); it needs the
+  payment history and the person's word that nothing was supplied. A reversal of an
+  invoice that also has a credit memo in another period — **BLOCK**: listed for the
+  person, not passed to the selector. Voided
+  documents (never posted, no turnover declared) — **WARN**: listed for the person only.
 - Any `include_lines` response with the "Line items truncated" warning — **BLOCK** until
   the lines are re-read; a truncated invoice has a net that is too low.
 - `vatSum` / `invoiceSumForRate` present while the entity is not on cash accounting —

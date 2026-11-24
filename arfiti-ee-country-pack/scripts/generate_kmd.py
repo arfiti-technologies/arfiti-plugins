@@ -81,6 +81,20 @@ reports"):
     not reported; a negative part B deduction on an ordinary invoice goes to a person;
     a part A invoice with two or more rates incl. a negative rate group is declared
     with code 03; a part A § 41¹ line (code 02) with column 9 filled is warned about.
+  * AR-1439 approved treatments (Andrew, 2026-11-24; "recommended" = EMTA's text is
+    silent, see references/kmd-inf-annex.md): (1) a sales invoice's cancellation in a
+    later period without a credit invoice is a minus row in the cancellation period
+    when it refers to the original invoice and cancels the transaction (VAT Act § 29(7)
+    on the period; a cancelled purchase invoice goes to a person); (2) a sales invoice
+    issued and cancelled in the same period is left out with its
+    cancellation when no turnover arose; (3) an invoice issued by mistake is corrected
+    in its own period (§ 27(5)), so a cancellation whose reason is not recorded goes to
+    a person; (4) § 41¹ invoices count toward the limit (unchanged); (5) a negative
+    ordinary sales invoice is a minus row only when it refers to an original invoice;
+    (6a) a single-rate sales invoice with lines of both signs is one row, no code;
+    (6b) an ordinary part B invoice with lines of both signs is one row, net amounts. Every case
+    whose deciding fact is absent goes to a person (`cancellation_review`,
+    `sign_review`).
 
 Usage:
     python3 generate_kmd.py --input /tmp/kmd_data_14276473.json --output /tmp/
@@ -696,13 +710,15 @@ def line_nets_mismatch(lines: List[Tuple[Optional[str], Decimal, bool]], documen
 
 def mixed_rate_rows(lines: List[Tuple[Optional[str], Decimal, bool]],
                     vat: Optional[Decimal]) -> Tuple[Optional[List[dict]], Optional[str]]:
-    """Part A rows for an ordinary invoice whose negative lines are whole rate groups.
+    """Part A rows for an ordinary sales invoice whose lines carry both signs.
 
-    Returns (rows, None) — one row per rate, signed net, document order — when the
+    Lines of both signs at ONE rate (no 0 %/exempt part) are handed to single_rate_row
+    (AR-1439 recommended treatment: one row, signed net, no code). Otherwise returns
+    (rows, None) — one row per rate, signed net, document order — when the
     invoice is the case EMTA's instructions and examples settle: supply at two to four
     rates, a negative rate group among them, no negative 0 %/exempt/untaxed line, no
-    rate whose lines carry both signs (negative lines at a single rate are not settled
-    by the sources), every line under the general procedure (a § 41/§ 42/§ 41¹ line
+    rate whose lines carry both signs (on a multi-rate invoice that is not settled by
+    the sources), every line under the general procedure (a § 41/§ 42/§ 41¹ line
     needs codes this tool does not assign, and a § 41¹ net stays out of column 9), and
     the invoice's VAT equal to Σ rate-group net × rate (so a line cannot carry another
     rate's label). Otherwise (None, the reason a person decides). Zero-net lines carry
@@ -718,6 +734,7 @@ def mixed_rate_rows(lines: List[Tuple[Optional[str], Decimal, bool]],
                       "figures before it can be declared under code 03")
 
     groups: Dict[str, List[Decimal]] = {}
+    untaxed_part = False
     for rate, value, special in lines:
         if special:
             return person("a line under a special procedure (§ 41/§ 42/§ 41¹)")
@@ -726,13 +743,16 @@ def mixed_rate_rows(lines: List[Tuple[Optional[str], Decimal, bool]],
         if rate is None:
             if value < 0:
                 return person("a negative 0 %/exempt/untaxed line")
+            untaxed_part = True
             continue
         groups.setdefault(rate, []).append(value)
+    if len(groups) == 1:
+        return single_rate_row(groups, untaxed_part, vat, len(lines))
     for rate, values in groups.items():
         if any(v < 0 for v in values) and any(v > 0 for v in values):
             return person(f"lines of both signs at the single rate {rate} %")
-    if len(groups) < 2:
-        return person("negative supply at a single rate")
+    if not groups:   # defensive: a negative untaxed line has returned above
+        return person("no line at an annex rate")
     if len(groups) > MAX_PART_A_LINES_PER_INVOICE:
         return person(f"supply at {len(groups)} rates, more than the "
                       f"{MAX_PART_A_LINES_PER_INVOICE} lines part A takes per invoice")
@@ -748,6 +768,38 @@ def mixed_rate_rows(lines: List[Tuple[Optional[str], Decimal, bool]],
         return check_data(f"the rate groups give VAT {expected:.2f}, the invoice's VAT is "
                           f"{vat:.2f} (a rate label may be wrong)")
     return [{"tax_rate": r, "net_amount": f"{t:.2f}"} for r, t in totals.items()], None
+
+
+def single_rate_row(groups: Dict[str, List[Decimal]], untaxed_part: bool,
+                    vat: Optional[Decimal], line_count: int
+                    ) -> Tuple[Optional[List[dict]], Optional[str]]:
+    """One part A row for an ordinary sales invoice whose lines of both signs share one rate.
+
+    AR-1439 recommended treatment (approved 2026-11-24; EMTA's text is silent): one row,
+    the rate group's signed net total in column 9, no special code (code 03 needs two or
+    more rates, or a 0 %/exempt part). Returns (rows, None), or (None, the reason a person
+    decides) when the invoice also has a 0 %/exempt/untaxed part (whether code 03 then
+    applies is the unsettled question recorded in references/kmd-inf-annex.md), or when
+    the invoice's VAT is not the group's net × rate (a line may carry a wrong rate label).
+    The caller has already refused negative 0 %/exempt lines and special-procedure lines.
+    """
+    (rate, values), = groups.items()
+    if untaxed_part:
+        return None, ("invoice with lines of both signs at one rate and a 0 %/exempt/"
+                      "untaxed part: whether code 03 applies is not settled by EMTA's "
+                      "text, a person decides")
+    if vat is None:
+        return None, ("invoice with lines of both signs at one rate: no vat_amount to "
+                      "check the rate label against; a person checks the invoice's figures")
+    total = sum(values, Decimal("0.00"))
+    expected = total * ANNEX_LINE_RATES[rate]
+    tolerance = max(INF_GROSS_TOLERANCE,
+                    min(Decimal("0.01") * line_count, LINE_NETS_MAX_TOLERANCE))
+    if abs(expected - vat) > tolerance:
+        return None, (f"invoice with lines of both signs at the single rate {rate} %: the "
+                      f"rate gives VAT {expected:.2f}, the invoice's VAT is {vat:.2f} (a rate "
+                      "label may be wrong); a person checks the invoice's figures")
+    return [{"tax_rate": rate, "net_amount": f"{total:.2f}"}], None
 
 
 def gross_mismatch(inv: dict, net: Decimal, label: str, credit: bool) -> Optional[str]:
@@ -806,25 +858,291 @@ def sign_inconsistency(inv: dict, net: Decimal, label: str, credit: bool) -> Opt
             "is for a person to decide")
 
 
-def negative_line_reason(side: str, credit: bool) -> str:
-    """Why an invoice whose lines carry both signs goes to a person."""
-    if side == "B":
-        return ("purchase invoice with lines of both signs: part B has one row per "
-                "invoice and EMTA's instructions give no presentation for it; a person "
-                "decides")
+def negative_line_reason(credit: bool) -> str:
+    """Why a sales invoice (part A) whose lines carry both signs goes to a person.
+
+    Part B invoices with lines of both signs are declared as one row (AR-1439 rule 6b);
+    an ordinary part A invoice with a positive net, or a negative net at a single rate
+    with a reference to an original invoice, is decided by mixed_rate_rows.
+    """
     if credit:
         return ("credit invoice with lines of both signs: EMTA's instructions give no "
                 "presentation for it; a person decides")
-    # Side A ordinary invoice with a net above zero is decided by mixed_rate_rows.
-    return ("invoice with lines of both signs and a total of zero or below: EMTA's "
+    return ("invoice with lines of both signs and a total of zero or below (on more than "
+            "one rate, or without a reference to an original invoice): EMTA's "
             "instructions do not settle how it is shown; a person decides")
+
+
+# AR-1439 rules 1-3 (approved 2026-11-24). A cancellation entry is an invoice-list entry
+# for a cancellation of an invoice WITHOUT a credit invoice (in the ledger: a reversal).
+# It carries the cancelled invoice's partner, document type and figures as stored on that
+# invoice (positive), its own number and date, `original_invoice_number` (the invoice the
+# cancellation refers to, from a recorded link) and a `cancellation` object.
+CANCELLATION_REASONS = ("transaction_cancelled", "issued_in_error")
+# Only the cancellation of a sales invoice can be declared (part A minus row) or left out
+# with its original; a purchase invoice's cancellation always goes to a person (part B
+# takes a minus sign only on a received credit invoice or in the § 29¹(4) case).
+DECLARABLE_CANCELLATION_TYPES = {"AR_INVOICE"}
+CREDIT_MEMO_TYPES = {"AR_CREDIT_MEMO", "AP_CREDIT_MEMO"}
+ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-\d{2}$")
+
+# Rule 3 review text: which treatment applies in which situation.
+MISTAKE_OR_CANCELLATION_TEXT = (
+    "if the invoice was issued by mistake (no such transaction took place), the error is "
+    "in the declaration of the period the invoice was declared in: correct that period "
+    "(VAT Act § 27(5)) and resubmit its KMD INF with the line at zero amounts (KMD INF "
+    "instructions, 'Correcting the KMD INF form'); nothing goes in this period. If the "
+    "transaction itself was cancelled, it goes in the period of the cancellation (VAT Act "
+    "§ 29(7)): a minus row here, like a credit invoice. A person says which and sets "
+    "cancellation.reason ('issued_in_error' or 'transaction_cancelled')")
+
+
+def _original_reference(inv: dict, label: str) -> str:
+    """The original invoice number the document itself refers to, or ""."""
+    raw = inv.get("original_invoice_number")
+    if raw is None or raw == "":
+        return ""
+    if isinstance(raw, bool) or not isinstance(raw, (str, int)):
+        raise ValueError(f"{label}: original_invoice_number must be the original invoice's "
+                         f"number as text, got {raw!r}")
+    return str(raw).strip()
+
+
+def _cancellation(inv: dict, label: str) -> Optional[dict]:
+    """The entry's `cancellation` object, validated, or None for an ordinary entry."""
+    raw = inv.get("cancellation")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label}: cancellation must be an object")
+    reason = raw.get("reason")
+    if reason is not None and reason not in CANCELLATION_REASONS:
+        raise ValueError(f"{label}: cancellation.reason must be one of "
+                         f"{', '.join(CANCELLATION_REASONS)} or null, got {reason!r}")
+    turnover = raw.get("turnover_arose")
+    if turnover is not None and not isinstance(turnover, bool):
+        raise ValueError(f"{label}: cancellation.turnover_arose must be true, false or "
+                         f"null, got {turnover!r}")
+    original_date = raw.get("original_invoice_date")
+    if original_date is not None and not isinstance(original_date, str):
+        raise ValueError(f"{label}: cancellation.original_invoice_date must be a "
+                         f"YYYY-MM-DD date, got {original_date!r}")
+    return {"reason": reason, "turnover_arose": turnover,
+            "original_invoice_date": original_date}
+
+
+def _month(value) -> Optional[Tuple[int, int]]:
+    match = ISO_DATE_RE.match(str(value or "").strip())
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def _same_figures(a: dict, b: dict) -> bool:
+    """True when two entries carry the same net, VAT and per-rate line nets (M6)."""
+    def figures(inv: dict):
+        label = f"invoice {inv.get('invoice_number')!r}"
+        net = required_amount(inv, "net_amount", label)
+        vat = (required_amount(inv, "vat_amount", label)
+               if inv.get("vat_amount") not in (None, "") else None)
+        gross = (required_amount(inv, "gross_amount", label)
+                 if inv.get("gross_amount") not in (None, "") else None)
+        lines = _line_nets(inv, label)
+        per_rate = None
+        if lines is not None:
+            per_rate = {}
+            for rate, value, _sp in lines:
+                per_rate[rate] = per_rate.get(rate, Decimal("0.00")) + value
+            per_rate = {r: v for r, v in per_rate.items() if v != 0}
+        return net, vat, gross, per_rate
+    return figures(a) == figures(b)
+
+
+def cancellation_decisions(invoices: list) -> Dict[int, Tuple[str, str]]:
+    """Decide every cancellation entry and the invoices it names (AR-1439 rules 1-3).
+
+    Returns {index: ("declare" | "omit" | "review", reason)} for each cancellation entry
+    and for each entry linked to one; entries not returned are ordinary invoices. A
+    cancellation names the entry with the same partner_key whose invoice_number equals its
+    `original_invoice_number`; any other document whose `original_invoice_number` is that
+    same invoice (a credit memo, a reduction or replacement invoice) is linked too. Nothing is matched by amount or across partners.
+
+    * Only the cancellation of a sales invoice (AR_INVOICE) can be declared or omitted.
+      A cancelled purchase invoice (AP_INVOICE) always goes to a person: the buyer
+      reflects it in the cancellation period (VAT Act § 29(7)), but part B takes a minus
+      sign only on a received credit invoice or in the § 29¹(4) case. A cancelled credit
+      memo also goes to a person.
+    * Later period: "declare" (a minus row, counted as a credit; § 29(7) on the period,
+      row form recommended) only with a reference, reason "transaction_cancelled", no
+      other cancellation of the same invoice, no credit memo of that invoice in the list,
+      and the invoice itself not in this period's list. Otherwise "review"; reason not
+      recorded or "issued_in_error" (corrected in the original period, § 27(5)) included.
+    * Same period (recommended): the cancellation and its one original are "omit" when
+      turnover_arose is false and both carry the same figures; otherwise both "review".
+    * Missing or contradictory dates, no reference: "review".
+
+    A review spreads over everything linked by a reference (the invoice, its other
+    cancellations, its credit memos, a cancellation of a cancellation), so an invoice is
+    never declared or left out while a linked document waits for a person.
+    """
+    decisions: Dict[int, Tuple[str, str]] = {}
+    links: Dict[int, set] = {}
+    by_original: Dict[int, List[Tuple[int, dict]]] = {}
+    # Every cancellation grouped by the invoice it names, before any is decided (M1):
+    # two cancellations of one invoice go to a person together, whatever else they fail.
+    groups: Dict[Tuple[str, str], List[int]] = {}
+    for i, inv in enumerate(invoices):
+        if isinstance(inv, dict) and inv.get("cancellation") is not None:
+            ref = _original_reference(inv, f"invoice {inv.get('invoice_number')!r}")
+            if ref:
+                groups.setdefault((str(inv.get("partner_key") or "").strip(), ref),
+                                  []).append(i)
+
+    def link(a: int, b: int) -> None:
+        links.setdefault(a, set()).add(b)
+        links.setdefault(b, set()).add(a)
+
+    def key_of(inv: dict) -> str:
+        return str(inv.get("partner_key") or "").strip()
+
+    def type_of(inv: dict) -> str:
+        return str(inv.get("document_type") or "").strip().upper()
+
+    for i, inv in enumerate(invoices):
+        if not isinstance(inv, dict) or inv.get("cancellation") is None:
+            continue
+        label = f"invoice {inv.get('invoice_number')!r}"
+        canc = _cancellation(inv, label)
+        ref = _original_reference(inv, label)
+        key = key_of(inv)
+        doc_type = type_of(inv)
+        named, memos = [], []
+        if ref:
+            for j, other in enumerate(invoices):
+                if j == i or not isinstance(other, dict) or key_of(other) != key:
+                    continue
+                if str(other.get("invoice_number") or "").strip() == ref:
+                    named.append(j)
+                elif (other.get("cancellation") is None
+                      and _original_reference(other, f"invoice {other.get('invoice_number')!r}")
+                      == ref):
+                    # Any other document that refers to the same invoice: a credit memo,
+                    # a negative (reduction) invoice under rule 5, anything else.
+                    memos.append(j)
+        siblings = [j for j in groups.get((key, ref), []) if j != i] if ref else []
+        for j in named + memos + siblings:
+            link(i, j)
+        cancelled_in = _month(inv.get("invoice_date"))
+        issued_in = _month(canc["original_invoice_date"])
+        if cancelled_in is None or issued_in is None:
+            decisions[i] = ("review", "cancellation without invoice_date and "
+                            "cancellation.original_invoice_date (YYYY-MM-DD): its period "
+                            "cannot be placed; a person decides")
+        elif issued_in > cancelled_in:
+            decisions[i] = ("review", "cancellation dated before the invoice it cancels; "
+                            "a person checks the dates")
+        elif doc_type == "AP_INVOICE":
+            decisions[i] = ("review", "cancellation of a purchase invoice without a credit "
+                            "invoice: the buyer reflects it in the period of the cancellation "
+                            "(VAT Act § 29(7)), but part B takes a minus sign only on a "
+                            "received credit invoice or in the § 29¹(4) case; how it is "
+                            "shown is for a person to decide")
+        elif doc_type not in DECLARABLE_CANCELLATION_TYPES:
+            decisions[i] = ("review", f"cancellation of a {doc_type}: only the cancellation "
+                            "of a sales invoice is treated like a credit invoice; a person "
+                            "decides")
+        elif not ref:
+            decisions[i] = ("review", "cancellation without a credit invoice that does not "
+                            "refer to the original invoice (original_invoice_number): a "
+                            "person decides")
+        elif siblings:
+            decisions[i] = ("review", f"invoice {ref!r} has {len(siblings) + 1} cancellations "
+                            "in the period; a person decides")
+        elif memos:
+            decisions[i] = ("review", f"invoice {ref!r} is cancelled and another document in "
+                            "the list (a credit memo, a reduction invoice or any other document) "
+                            "also refers to it: the cancellation, the invoice and that document "
+                            "are for a person to decide")
+        elif issued_in < cancelled_in:
+            if named:
+                decisions[i] = ("review", f"cancellation says invoice {ref!r} is from an "
+                                "earlier period, but it is in this period's list; a person "
+                                "checks the dates")
+            elif canc["reason"] == "issued_in_error":
+                decisions[i] = ("review", f"invoice {ref!r} was issued by mistake: correct the "
+                                "period it was declared in (VAT Act § 27(5)) and resubmit that "
+                                "period's KMD INF with the line at zero amounts (KMD INF "
+                                "instructions, 'Correcting the KMD INF form'); nothing is "
+                                "declared for it in this period. A person makes the "
+                                "correction")
+            elif canc["reason"] is None:
+                decisions[i] = ("review", f"invoice {ref!r} cancelled in a later period "
+                                "without a credit invoice; whether it was issued by mistake "
+                                "or the transaction was cancelled is not recorded: "
+                                f"{MISTAKE_OR_CANCELLATION_TEXT}")
+            else:
+                decisions[i] = ("declare", "")
+        else:
+            originals = [j for j in named if invoices[j].get("cancellation") is None
+                         and type_of(invoices[j]) == doc_type]
+            if len(originals) != 1 or len(named) != 1:
+                decisions[i] = ("review", f"invoice {ref!r} cancelled in the period it was "
+                                "issued, but the list does not hold exactly one original "
+                                f"for it (found {len(named)} entr{'y' if len(named) == 1 else 'ies'} "
+                                "with that partner and number); a person decides")
+            elif _month(invoices[originals[0]].get("invoice_date")) != issued_in:
+                decisions[i] = ("review", "cancellation.original_invoice_date does not match "
+                                f"the date of invoice {ref!r} in the list; a person checks "
+                                "the dates")
+            else:
+                by_original.setdefault(originals[0], []).append((i, canc))
+
+    for j, cancels in by_original.items():
+        ref = str(invoices[j].get("invoice_number") or "").strip()
+        if len(cancels) > 1:
+            why = f"invoice {ref!r} has {len(cancels)} cancellations in the period; a person decides"
+            for i, _canc in cancels:
+                decisions[i] = ("review", why)
+            decisions[j] = ("review", why)
+            continue
+        i, canc = cancels[0]
+        if canc["turnover_arose"] is not False:
+            known = ("turnover arose (goods or services supplied, or payment received)"
+                     if canc["turnover_arose"] else
+                     "it is not confirmed that nothing was supplied and no payment was ever "
+                     "received")
+            decisions[i] = decisions[j] = (
+                "review", f"invoice {ref!r} issued and cancelled in the same period and "
+                f"{known}: how it is shown is for a person to decide")
+        elif not _same_figures(invoices[i], invoices[j]):
+            decisions[i] = decisions[j] = (
+                "review", f"invoice {ref!r} issued and cancelled in the same period, but the "
+                "cancellation's figures (net, VAT, gross, per-rate lines) differ from the "
+                "invoice's; "
+                "a person checks them")
+        else:
+            why = (f"invoice {ref!r} issued and cancelled in the same period with no "
+                   "turnover (confirmed: nothing supplied, no payment ever received): both "
+                   "are left out (AR-1439 recommended treatment; EMTA's text is silent)")
+            decisions[i] = decisions[j] = ("omit", why)
+
+    # A review spreads over everything linked to it by a reference.
+    pending = [i for i, (outcome, _why) in decisions.items() if outcome == "review"]
+    while pending:
+        source = pending.pop()
+        for other in links.get(source, ()):
+            if decisions.get(other, ("",))[0] != "review":
+                number = invoices[source].get("invoice_number")
+                decisions[other] = ("review", f"linked to {number!r}, which goes to a "
+                                    f"person: {decisions[source][1]}")
+                pending.append(other)
+    return decisions
 
 
 def select_inf_partners(invoices: List[dict], side: str) -> dict:
     """
     Decide which partners' invoices go into KMD INF part A (side "A", invoices issued)
-    or part B (side "B", invoices received), from invoice-level input. Rules, all from
-    EMTA's KMD INF instructions (vorm_kmd_inf_2025_07_eng.pdf):
+    or part B (side "B", invoices received), from invoice-level input. Rules from
+    EMTA's KMD INF instructions (vorm_kmd_inf_2025_07_eng.pdf), except the AR-1439
+    bullet, which marks what is settled and what is a recommended treatment:
 
       * The limit is the invoices' total WITHOUT VAT per partner in the period and is
         met at "at least 1,000 euros" (>= INF_THRESHOLD).
@@ -853,6 +1171,24 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         `vat_deducted_in_period` or a negative total on an ordinary purchase invoice
         goes to `sign_review`
         (the § 29¹(4) case is identified by a person, not by this tool).
+      * AR-1439 (approved 2026-11-24; "recommended" = EMTA's text is silent, agreed
+        conservative treatment). Settled according to the 2026-11-24 research pass: a
+        cancellation belongs to the period of the cancellation (§ 29(7)); an invoice
+        issued by mistake is corrected in its own period (§ 27(5)). Recommended: the row
+        forms below. cancellation_decisions decides every cancellation entry: only a
+        sales invoice's cancellation in a later period, with a reference, reason
+        "transaction_cancelled", no other cancellation and no other document referring to
+        that invoice in the list, is declared (a part A minus row, counted as a credit); in the same
+        period, the sales invoice and its cancellation are excluded when
+        `cancellation.turnover_arose` is false and their figures match. Everything else
+        goes to `cancellation_review` with every entry linked to it, a cancelled
+        purchase invoice always. A negative ordinary sales invoice is declared as a minus
+        row only when it carries `original_invoice_number`; otherwise `sign_review`. A
+        part A ordinary invoice whose lines of both signs share one rate (no 0 %/exempt
+        part, VAT = net × rate) is declared with one `rate_rows` entry and no special
+        code; an ordinary part B invoice with lines of both signs is declared as one row
+        with its net total and net deducted VAT (a negative one, and any part B credit
+        memo with lines of both signs, go to `sign_review`).
       * Part A special code 03 covers an invoice with supply at two or more rates,
         "incl. negative supply" (instructions, part A column 10; EMTA part A example:
         1500 = 24 % 2000 and 9 % −500, two rows, column 6 = 1500 on both). Given
@@ -860,10 +1196,11 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         positive and whose negative lines are whole rate groups is declared, counted at
         its net total, and returned with `rate_rows` and `special_codes: ["03"]` (only
         general-procedure lines: a line marked `special_procedure` keeps it with a
-        person). Every other shown invoice whose lines carry both signs — a negative
-        line at a single rate or at 0 %/exempt, a total of zero or below, a credit memo,
-        any part B invoice — goes to `sign_review`, as does an ordinary purchase invoice
-        with a negative total. These two checks run after the exclusions (an invoice
+        person). Every other part A invoice whose lines carry both signs — a rate whose
+        lines carry both signs on a multi-rate invoice, a negative 0 %/exempt line, a
+        total of zero or below (unless single-rate with a reference, above), a credit
+        memo — goes to `sign_review`, as does an ordinary purchase invoice with a
+        negative total. These two checks run after the exclusions (an invoice
         that is not shown is not sent for review by them); the header sign check above
         still runs first.
       * An invoice counts into the limit only once, in the first period it must be
@@ -889,7 +1226,12 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     and cross_border_reverse_charge (bool, side B only; then vat_amount and
     reverse_charge_vat_amount are required) and import_reverse_charge (bool, side B only:
     a reverse-charge line on a code with tax_scope "import"; the invoice goes to
-    `reverse_charge_review`, as does a cross-border bill with a special_procedure line). line_nets (list of {rate, net_amount}, see
+    `reverse_charge_review`, as does a cross-border bill with a special_procedure line).
+    Optional original_invoice_number (text: the invoice the document itself refers to,
+    from a link recorded on it, never matched by number or amount) and, on a cancellation
+    entry only, cancellation = {reason: "transaction_cancelled" | "issued_in_error" | null
+    (set by a person), original_invoice_date: "YYYY-MM-DD", turnover_arose: true | false
+    | null}. line_nets (list of {rate, net_amount}, see
     _line_nets) must add up to the invoice's net (a credit memo's turned back to the
     document's sign) within a cent per line, or the whole selection is refused; invoices
     passed without it are listed under `lines_not_checked`, because negative lines cannot
@@ -920,7 +1262,7 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     sign_inconsistency) is neither declared nor counted toward the limit; it is returned
     under `sign_review` with its figures. Returns {"declare", "needs_registry_code",
     "below_threshold", "excluded", "sign_review", "reverse_charge_review",
-    "rate_review", "gross_reviewed", "gross_not_checked", "lines_not_checked"}. A line
+    "rate_review", "cancellation_review", "gross_reviewed", "gross_not_checked", "lines_not_checked"}. A line
     rate is canonicalised ("24.00" -> "24"); an invoice with a positive line rate outside
     24/22/20/13/9/5 goes to `rate_review` for a person.
     """
@@ -937,11 +1279,13 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     sign_review: List[dict] = []
     reverse_charge_review: List[dict] = []
     rate_review: List[dict] = []
+    cancellation_review: List[dict] = []
     lines_not_checked: List[str] = []
     line_mismatches: List[str] = []
-    for inv in invoices:
-        if not isinstance(inv, dict):
-            raise ValueError("each invoice must be a JSON object")
+    if not all(isinstance(inv, dict) for inv in invoices):
+        raise ValueError("each invoice must be a JSON object")
+    decided = cancellation_decisions(invoices)
+    for index, inv in enumerate(invoices):
         key = str(inv.get("partner_key") or "").strip()
         if not key:
             raise ValueError(f"invoice {inv.get('invoice_number')!r} has no partner_key")
@@ -996,6 +1340,31 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
                              "apply to invoices received (side B) only")
         vat_deducted = (required_amount(inv, "vat_deducted_in_period", label)
                         if side == "B" else None)
+        reference = _original_reference(inv, label)
+        cancellation = _cancellation(inv, label)
+
+        # AR-1439 rules 1-3: cancellation entries and the invoices they name.
+        cancel_why = None
+        outcome, why = decided.get(index, ("", ""))
+        if outcome == "omit":
+            excluded.append({"partner_key": key, "invoice_number": inv.get("invoice_number"),
+                             "reason": why})
+            continue
+        if outcome == "review":
+            # Listed for a person even when the invoice would be excluded below (e.g. no
+            # supply at an annex rate), so the person sees every cancellation.
+            cancel_why = why
+        if cancel_why:
+            cancellation_review.append({
+                "partner_key": key, "invoice_number": inv.get("invoice_number"),
+                "document_type": doc_type, "original_invoice_number": reference or None,
+                "original_invoice_date": (cancellation or {}).get("original_invoice_date"),
+                "net_amount": inv.get("net_amount"), "vat_amount": inv.get("vat_amount"),
+                "gross_amount": inv.get("gross_amount"), "reason": cancel_why})
+            continue
+        # Only a cancellation decided "declare" (rule 1) reaches here: `as_credit` below
+        # makes it a minus row in this period, counted like a credit invoice.
+        cancels = cancellation is not None
 
         # Who decides how the invoice is shown: the annex text, or a person.
         review = sign_inconsistency(inv, net, label, credit_doc)
@@ -1024,7 +1393,8 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
             off = line_nets_mismatch(lines, -net if credit_doc else net, label)
             if off:
                 line_mismatches.append(off)
-        if credit_doc:
+        as_credit = credit_doc or cancels
+        if as_credit:
             net = -abs(net) or Decimal("0.00")   # a zero net stays "0.00", never "-0.00"
         # Reviewed before the exclusions below: an import or mixed reverse-charge bill
         # that would also be excluded (e.g. VAT not deducted) still goes to a person.
@@ -1080,14 +1450,33 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         # sign on an ordinary purchase invoice.
         review = None
         rate_rows = None
-        if lines and any(v < 0 for _r, v, _sp in lines) and any(v > 0 for _r, v, _sp in lines):
-            if side == "A" and not credit_doc and net > 0:
+        mixed_lines = bool(lines) and any(v < 0 for _r, v, _sp in lines) and any(
+            v > 0 for _r, v, _sp in lines)
+        if side == "B" and mixed_lines and credit_doc:
+            # Rule 6b covers ordinary purchase invoices only. An ordinary part B invoice
+            # with lines of both signs is one row with the net invoice total and the net
+            # VAT deducted: nothing to decide here; a negative one is caught below.
+            review = ("purchase credit invoice with lines of both signs: EMTA's instructions "
+                      "give no presentation for it and the AR-1439 treatments do not cover "
+                      "it; a person decides")
+        if side == "A" and mixed_lines:
+            if not as_credit and (net > 0 or (net < 0 and reference)):
                 vat = (required_amount(inv, "vat_amount", label)
                        if inv.get("vat_amount") not in (None, "") else None)
                 rate_rows, review = mixed_rate_rows(lines, vat)
+                if rate_rows is not None and net < 0 and len(rate_rows) > 1:
+                    rate_rows, review = None, negative_line_reason(False)
             else:
-                review = negative_line_reason(side, credit_doc)
-        if review is None and side == "B" and not credit_doc and (vat_deducted < 0 or net < 0):
+                review = negative_line_reason(as_credit)
+        if review is None and side == "A" and not as_credit and net < 0 and not reference:
+            # Rule 5 (recommended, from VAT Act § 37(4): a credit invoice amends an original
+            # invoice and refers to it): a negative ordinary sales invoice is declared as a
+            # minus row only when it refers to an original invoice.
+            review = (f"ordinary sales invoice with a negative total (net {net:.2f}) that does "
+                      "not refer to an original invoice (original_invoice_number): it is "
+                      "declared as a minus row only when the document refers to the invoice "
+                      "it amends; a person decides")
+        if review is None and side == "B" and not as_credit and (vat_deducted < 0 or net < 0):
             review = (f"ordinary purchase invoice with a minus sign (net {net:.2f}, input VAT "
                       f"deducted {vat_deducted:.2f}): part B takes a minus sign only on a credit "
                       "invoice or on an invoice unpaid under VAT Act § 29¹(4) (bad debt, "
@@ -1108,11 +1497,12 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
         # negative net means the whole invoice is negative: a credit.
         signed = dict(inv, signed_net_amount=f"{net:.2f}")
         if rate_rows is not None:
-            # Declared under special code 03: one part A row per rate, the invoice's net
-            # (column 6) repeated on each, the rate's signed net for column 9.
+            # One part A row per rate, the invoice's net (column 6) repeated on each, the
+            # rate's signed net for column 9. Two or more rates: special code 03. One rate
+            # (lines of both signs, rule 6a): one row, no special code.
             signed["rate_rows"] = rate_rows
-            signed["special_codes"] = [MIXED_RATE_SPECIAL_CODE]
-        is_credit = INF_DOCUMENT_TYPES[side][doc_type] or net < 0
+            signed["special_codes"] = [MIXED_RATE_SPECIAL_CODE] if len(rate_rows) > 1 else []
+        is_credit = as_credit or net < 0
         for src, dst in (("vat_amount", "signed_vat_amount"),
                          ("vat_deducted_in_period", "signed_vat_deducted_in_period")):
             if src in inv and inv[src] not in (None, ""):
@@ -1222,7 +1612,7 @@ def select_inf_partners(invoices: List[dict], side: str) -> dict:
     return {"declare": declare, "needs_registry_code": needs_code,
             "below_threshold": below, "excluded": excluded, "sign_review": sign_review,
             "reverse_charge_review": reverse_charge_review, "rate_review": rate_review,
-            "gross_reviewed": gross_reviewed, "gross_not_checked": gross_not_checked,
+            "cancellation_review": cancellation_review, "gross_reviewed": gross_reviewed, "gross_not_checked": gross_not_checked,
             "lines_not_checked": lines_not_checked}
 
 

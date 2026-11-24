@@ -18,6 +18,17 @@ received (part B) per transaction partner once the partner reaches the threshold
 - EMTA, *Filing VAT returns and reports*:
   <https://www.emta.ee/en/business-client/taxes-and-payment/value-added-tax/filing-vat-returns-and-reports>
 
+Sources used by the AR-1439 second research pass (read 2026-11-24 by a research pass,
+quotes not independently re-checked); cited below as "research pass 2026-11-24":
+- EMTA's KMD INF guidance pages on emta.ee: general, part A and part B.
+- EMTA's two KMD INF example files (part A, part B; the links above).
+- EMTA handbook chapter *Käibemaksu korrigeerimine* (VAT corrections).
+- Ministry of Finance commentary on the VAT Act (January 2026).
+
+Two gaps in that pass: the consolidated text of the VAT Act was not opened directly
+(its sections are cited through the commentary and EMTA's pages), and the form's
+completion annex was read in the redaction in force 1.1–29.6.2025.
+
 A taxable person with limited liability files the KMD but not the annex (EMTA filing page).
 
 ## Threshold
@@ -99,7 +110,8 @@ reverse-charge VAT and `gross_amount` as stored, and its `document_type`; the se
 memo as a credit and returns `signed_net_amount` (negative) for the annex columns,
 which take credit invoices with a minus sign. An ordinary invoice whose net, VAT and
 total are all negative or zero (a reduction under VAT Act § 29¹) carries a negative
-`net_amount` and also counts as a credit.
+`net_amount` and counts as a credit **only when it carries `original_invoice_number`**
+(rule 5 below); otherwise it goes to `sign_review`.
 
 **Only an invoice whose amounts carry one sign is presented**, with one exception below.
 An ordinary invoice with net, VAT and total all ≥ 0, an ordinary invoice with all ≤ 0
@@ -141,18 +153,25 @@ passes `line_nets` for every invoice and the list must be empty before filing. T
   is "the total amount of invoices … without VAT" and this is not a credit invoice, so
   its negative rate group does not enter the credit total. EMTA gives no example at the
   limit; that reading follows the text.
-- **Kept with a person (`sign_review`):** a negative line at a single rate (or a rate
-  whose lines carry both signs), a negative 0 %/exempt/untaxed line, an invoice with
-  lines of both signs whose total is zero or below, a credit memo with lines of both
-  signs, a multi-rate invoice with a line under a special procedure (§ 41/§ 42/§ 41¹,
-  marked `special_procedure`; its rows need codes 01/02 and a § 41¹ net stays out of
-  column 9), and any part B invoice with lines of both signs. EMTA's sources have no
-  example of these. The column definitions are totals (part A column 9 is the part of
-  the invoice declared at the rate, part B columns 6 and 8 are invoice totals), so a
-  discount line may well need no special treatment; the AR-1439 decision is that a
-  person confirms it rather than the tool. In practice an invoice with a discount line
-  stops for review, and so does an untaxed rounding line of −0.01: it is a real
-  document line, and ignoring small negative lines could hide a real mixed-sign case.
+- **Recommended, declared (rule 6a):** an ordinary sales invoice whose lines of both
+  signs are all at **one** rate, with no 0 %/exempt/untaxed line, and whose VAT equals
+  the net × rate within a cent per line: one row, column 9 = the rate's signed net total,
+  no special code (code 03 needs two or more rates, or a 0 %/exempt part). Returned with
+  one `rate_rows` entry and empty `special_codes`. With a negative total it is declared
+  only under rule 5 (it must carry `original_invoice_number`), as a minus row.
+- **Recommended, declared (rule 6b):** an ordinary part B invoice with lines of both
+  signs: one row with the net invoice total (column 6 = net + VAT) and the net VAT
+  deducted (column 8). A negative net still goes to `sign_review` (part B minus sign,
+  below), and so does a purchase credit memo with lines of both signs.
+- **Kept with a person (`sign_review`):** on a multi-rate sales invoice, a rate whose
+  lines carry both signs; a negative 0 %/exempt/untaxed line; a single-rate invoice
+  with lines of both signs and a 0 %/exempt part, or whose VAT is not net × rate; a
+  sales invoice with lines of both signs whose total is zero or below (unless rule 6a
+  with a reference applies); a sales credit memo with lines of both signs; and a
+  multi-rate invoice with a line under a special procedure (§ 41/§ 42/§ 41¹, marked
+  `special_procedure`; its rows need codes 01/02 and a § 41¹ net stays out of column 9).
+  An untaxed rounding line of −0.01 on a 24 % invoice is still a negative untaxed line
+  and stops for review: ignoring small negative lines could hide a real mixed-sign case.
   These line checks, and the part B minus-sign check below, skip
   invoices that would not be shown anyway (excluded above); an invoice whose own net,
   VAT and total disagree in sign still goes to `sign_review` first.
@@ -222,7 +241,10 @@ Each invoice object: `partner_key` (the ERP `customer_id` / `vendor_id`),
 (required, true/false), `line_nets` (always pass it), `cross_border_reverse_charge`
 (part B only), `gross_amount` (the header `amount`; always pass it; it makes
 `vat_amount` required), `reverse_charge_vat_amount`, `gross_mismatch_reviewed` (only a
-person sets it), optional
+person sets it), `original_invoice_number` (optional: the invoice the document refers
+to, from a recorded link), `cancellation` (only on a cancellation entry, SKILL Step 2
+item 3: `reason` `"transaction_cancelled"` / `"issued_in_error"` / `null`,
+`original_invoice_date`, `turnover_arose` `true` / `false` / `null`), optional
 `travel_special_procedure_only`, `professional_secrecy`, `counted_in_earlier_period`,
 and for part B `vat_deducted_in_period` (required: the input VAT this invoice puts into
 KMD line 5 this period, `0` when none). Amounts are numbers with a dot decimal; a
@@ -235,7 +257,8 @@ conflicting code goes to `needs_registry_code`. Records are never merged by name
 `excluded` (with the reason), `sign_review` (mixed-sign invoices and negative part B
 deductions, with their figures), `reverse_charge_review` (cross-border reverse charge
 with supplier VAT on the same invoice), `rate_review` (a line rate outside the annex
-rates), `gross_reviewed` (differences a person accepted,
+rates), `cancellation_review` (cancellations the treatments above leave to a person),
+`gross_reviewed` (differences a person accepted,
 with the reason), `gross_not_checked` (invoices passed without `gross_amount`) and
 `lines_not_checked` (invoices passed without `line_nets`). Do **not** aggregate the header `amount` for the limit with
 `query("transaction", group_by=..., aggregates={"amount": "sum"})`: that is the gross
@@ -366,30 +389,119 @@ only on a credit invoice or a § 29¹(4) unpaid invoice; cross-border reverse ch
 shown; domestic § 41¹ shown (A: code 02, column 9 empty; B: code 12, column 6 with VAT);
 an invoice declared by mistake is re-entered with zero amounts.
 
-Not settled by the official text found — **list for a person, do not add or remove
-annex lines on your own**:
+### AR-1439 treatments (approved by Andrew, 2026-11-24)
 
-- a negative line at a single rate, an invoice with lines of both signs and a negative
-  total, any part B invoice with lines of both signs, an ordinary purchase invoice with
-  a negative total;
-- code 03 on an invoice with two or more rates and no negative supply: the instructions
-  give code 03, EMTA's first part A example (24 % 500 + 9 % 1000) shows none;
+**"Settled according to the 2026-11-24 research pass"** means that pass found official
+text supporting it; the consolidated law text was not opened directly and its quotes
+were not re-checked (see Sources). **"Recommended"** means the official text is silent
+and this is the agreed conservative treatment, **not a statement of law**. Where the
+fact a treatment needs is absent from the input, the invoice goes to a person, and
+nothing beyond these six treatments is declared.
+
+1. **Invoice cancelled in a later period without a credit invoice.** Settled according
+   to the 2026-11-24 research pass on the period: the seller and the buyer reflect the
+   cancellation in the period of the cancellation (VAT Act § 29(7); *Käibemaksu
+   korrigeerimine*, Ministry of Finance commentary). Recommended row form, **part A
+   only**: treat the seller's cancellation like a credit invoice, a minus row in the
+   cancellation period, counted toward the credit total, **only when the cancellation
+   refers to the original invoice** (`original_invoice_number`; in the ledger a
+   cancellation is a reversal, and its `reversal_of_id` is that reference). The row
+   carries the cancellation document's own number and date (recommended, not settled:
+   a credit invoice row carries its own number and date, and the cancellation stands in
+   for the credit invoice; the original's number is kept with the working papers). The
+   selector also needs `cancellation.reason: "transaction_cancelled"` (rule 3), no
+   second cancellation of the same invoice, and no credit memo of that invoice in the
+   list. Otherwise: `cancellation_review`. **A cancelled purchase invoice always goes to
+   a person**: the buyer reflects it in the cancellation period (§ 29(7)), but part B
+   takes a minus sign only on a received credit invoice or in the § 29¹(4) case.
+2. **Sales invoice issued and cancelled in the same period.** Recommended: leave both
+   out when no turnover arose for the invoice (`cancellation.turnover_arose: false`,
+   which the caller may pass only when it is confirmed that nothing was supplied **and**
+   that no payment was ever received; the ledger refuses to reverse an invoice with a
+   live payment application, so a reversed invoice's `amount_paid` reads 0 even when it
+   was paid and the payment unmatched) and the cancellation's figures equal the
+   invoice's (net, VAT, gross and per-rate line nets). If turnover arose or is not confirmed
+   (`true` / `null`), the original is not in the list exactly once
+   (matched by partner and `original_invoice_number`, never by amount), the invoice has
+   more than one cancellation, its date does not match
+   `cancellation.original_invoice_date`, any other document in the list (a credit memo,
+   a reduction invoice, a replacement invoice) refers to it, the figures differ, or the cancelled document is a purchase invoice or a credit memo: the invoice and every
+   cancellation of it go to `cancellation_review`, whatever the order of the list. A
+   same-period purchase pair goes to a person too: whether leaving it out of part B is
+   safe was not shown. Cancellations that go to a person are listed even when the
+   invoice would otherwise be excluded (for example no supply at an annex rate), so the
+   person sees every cancellation. A voided document in the ledger was never posted, so
+   it declared no turnover and has no row; it is listed for the person only.
+
+   **Linked entries stay together.** A cancellation names the entry with the same
+   `partner_key` whose `invoice_number` equals its `original_invoice_number`, and any
+   other document whose `original_invoice_number` is that same invoice, of either sign (a
+   credit memo, a reduction invoice under rule 5, a replacement invoice). Two cancellations naming the same invoice are
+   linked to each other, whether or not the invoice is in the list. A cancellation with
+   another document referring to its invoice, or with a second cancellation, goes to
+   `cancellation_review`, and whenever a cancellation goes there every entry linked to
+   it goes too: the invoice, its credit memos and reduction invoices, other
+   cancellations of it, a cancellation of the cancellation; so no credit is declared
+   alone against an invoice the tool left out, and an invoice is never reduced twice. A cancellation that says its invoice is from an earlier period while that
+   invoice is in this period's list goes there with the invoice. A cancellation
+   **without** a reference, or whose reference names another partner's invoice, names
+   nothing: the invoice it may cancel is decided on its own and can be declared, so the
+   person's decision on the cancellation may also mean removing or changing that
+   invoice's row. The caller's duty for a reference: a link recorded in the ledger to an
+   existing invoice of the same partner, or what the person reads on the document;
+   never typed, inferred from a similar number or an equal amount, or borrowed from
+   another partner.
+3. **Invoice issued by mistake, found after filing.** Settled in general according to
+   the 2026-11-24 research pass: an error in a filed declaration is corrected by
+   amending the original period (VAT Act § 27(5); the KMD INF line is resubmitted at
+   zero amounts, KMD INF instructions, "Correcting the KMD INF form"); a cancelled
+   transaction goes in the current period (§ 29(7)). The generator cannot tell the two
+   apart, so a cancellation whose `cancellation.reason` is not recorded goes to
+   `cancellation_review`, and the review text says which treatment applies when. With
+   `"issued_in_error"` it also goes there, with the instruction to correct the original
+   period; nothing is declared for it in this period. Only a person sets the reason.
+4. **Domestic reverse charge (§ 41¹) and the EUR 1,000 limit.** Settled by
+   construction according to the 2026-11-24 research pass (a reading of the reporting
+   rule and the limit rule together; no sentence names § 41¹ in the limit): these
+   invoices are reported (part A code 02, part B code 12), so they count toward the
+   limit at their invoice totals without VAT, sales and purchases separately, credit
+   invoices not netted. The selector already did this before AR-1439; nothing changed
+   in code. Cautionary rule, outside the six treatments: a § 41¹ code whose rate is 0
+   or empty keeps the invoice with a person (SKILL Step 2), on a sale because column 7
+   needs the rate, on a purchase because `has_positive_rate_supply` would read false and
+   the selector would drop a reportable bill from part B and from the supplier's total.
+5. **Ordinary sales invoice with a negative total.** Recommended, from VAT Act § 37(4)
+   (a credit invoice is a document that amends an original invoice and refers to it):
+   declare a minus row only when the document refers to an original invoice
+   (`original_invoice_number`, with the caller's duty under rule 2); otherwise
+   `sign_review`. Declared, it counts toward the partner's credit total, like a credit
+   invoice. Before AR-1439 every all-negative ordinary invoice was declared as a credit;
+   this is stricter. A credit memo document type needs no reference field (it is a
+   credit invoice by type). Part B is unchanged: a negative ordinary purchase invoice
+   goes to a person.
+6. **Plus and minus lines on one invoice.** (a) Single-rate sales invoice:
+   recommended, one row with the net signed total, no special code. (b) Ordinary
+   purchase invoice, part B: recommended, one row with the net invoice total and the net
+   deducted VAT; a negative net goes to a person, and so does a purchase **credit memo**
+   with lines of both signs (6b does not cover it). (Details in "Lines of both signs"
+   above.)
+
+### Still not settled — list for a person, do not add or remove annex lines on your own
+
+- on a multi-rate sales invoice, a rate whose lines carry both signs; a negative
+  0 %/exempt line; a multi-rate invoice with lines of both signs and a total of zero or
+  below; a sales credit memo with lines of both signs; an ordinary purchase invoice
+  with a negative total;
+- code 03 on an invoice with two or more rates and no negative supply, or with one rate
+  and a 0 %/exempt part: the instructions give code 03, EMTA's first part A example
+  (24 % 500 + 9 % 1000) shows none;
 - a part A row that holds both general-procedure and § 41¹ supply at 24 %;
 - a reverse-charge purchase code with `tax_scope: "import"`;
-- a sales line on a § 41¹ code whose `default_rate` is 0 or empty (column 7 needs the
-  rate, which the code does not give);
-- open question, not decided here: an ordinary sales invoice whose amounts are all
-  negative is declared as a credit (minus sign), on the reading that it reduces the
-  taxable value (KMD INF instructions, part A: credit invoice and § 29¹ invoice); EMTA
-  has no example of a negative ordinary invoice that is neither;
+- a § 41¹ code whose `default_rate` is 0 or empty (cautionary, rule 4 above);
 - the part B § 29¹(4) bad-debt case (the selector cannot tell it from an error);
-- a cancellation in a later period **without a credit-invoice document** (VAT Act
-  § 29(7) puts a cancellation in the period of the cancellation, like a credit invoice,
-  but EMTA has no example of how a plain void appears in the annex);
-- an invoice issued and voided in the same period before filing (leaving it out is an
-  inference, not a sentence in the sources);
-- an invoice voided by mistake: zeroed in the original period's form or reversed in
-  the current period;
+- a purchase invoice cancelled without a credit invoice (part B: in the period of the
+  cancellation, but how the row looks is not settled);
+- a purchase credit memo with lines of both signs;
 - part B column 6 when a § 41¹ invoice shows no VAT amount.
 
 The annex lists invoices and credit invoices only; payments, set-offs and deposits are

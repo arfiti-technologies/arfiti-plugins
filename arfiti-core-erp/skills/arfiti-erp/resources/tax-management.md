@@ -1759,8 +1759,12 @@ submit(object_type="tax_code", operation="create", data=JSON.stringify({
 }))
 ```
 
-Resolution when an invoice line is posted: an explicit `is_tax_inclusive` on
-the line wins, otherwise the tax code's flag, otherwise net. The billing run
+Resolution when a customer (AR) invoice line is posted: an explicit
+`is_tax_inclusive` on the line wins, otherwise the tax code's flag, otherwise net.
+A supplier (AP) invoice line and a journal entry line take it from the line only:
+when the line does not set it the amount is net, and the tax code's flag is not read.
+A customer credit memo follows the AR rule, a supplier credit memo the AP rule, and
+`transaction.update` reads the flag from the line only. The billing run
 never sets the flag itself: recurring contract prices are net unless the tax
 code says otherwise.
 
