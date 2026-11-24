@@ -301,9 +301,25 @@ The `external_id` is stored in the `metadata` JSONB column. Later, transaction i
 - Setting up opening balances for a new entity starting on Arfiti
 - User provides a balance sheet from the prior year
 
-### Step 1: Ensure Fiscal Periods Exist
+### Step 1: Agree the Opening Date, then Ensure Its Fiscal Period Exists
 
-Opening balances from a 31.12.2024 balance sheet should be posted to fiscal period **2025-01** (January of the new fiscal year). Check if the period exists:
+Two dates are involved; keep them apart:
+
+- **As-of date** — the date of the source trial balance or balance sheet ("balances as at 31 October 2026").
+- **Opening date** — the day the opening entry is dated in Arfiti: the cutover, the first day the books run here.
+
+The opening entry is dated the **first day of the fiscal period** you name in `fiscal_period_name`, unless `opening_date` names another day inside that period. Balances as at D with a cutover on D+1 open on **D+1**: name the period that contains D+1. A trial balance as at 31 October 2026 with a 1 November cutover goes to `fiscal_period_name="2026-11"` and is dated 1 November 2026. Never pick the as-of date's month just because the source is dated month-end: `"2026-10"` would date it 1 October and show the balances for the whole of October.
+
+- If the user wants the entry dated the as-of date itself (31 October), that is a different, explicit choice: pass `fiscal_period_name="2026-10", opening_date="2026-10-31"` only after they agree to it.
+- A mid-period cutover (balances as at 14 November, cutover 15 November): `fiscal_period_name="2026-11", opening_date="2026-11-15"`.
+- `opening_date` outside the named period, a quarter or year period, or a closed or locked period is refused before anything is written. `opening_balances_with_subledger` takes no `opening_date`; it always posts on the period's first day.
+- **One opening entry per entity and period.** A second upload for a period that already has a posted opening entry, or one still waiting for approval, is refused; the answer's `existing_opening_entry` names it and its own date (`existing_posting_date`). To change the date of a waiting one, have it rejected first; of a posted one, reverse it first.
+- **Check every period first.** The guard is per period: an opening entry already posted in another period of the entity (for example one dated 1 October when the agreed date is 1 November) is not refused. Before importing, look for existing opening entries in all periods (`query("transaction", filters={"legal_entity_id": ID, "transaction_type": "OPENING_ENTRY"})`) and, if one is wrong, reverse it before posting the new one.
+- **At a fiscal-year boundary, ask before choosing the date if the trial balance still holds profit-and-loss accounts** (revenue or expense lines not yet closed to retained earnings). Dated the new year's first day, those lines fall inside the new year: its income statement is marked incomplete (a blocking "opening balances may contain earlier profit" gap) until someone confirms them. Dated the old year's last day (`opening_date`), they belong to the prior year and appear on the balance sheet as prior years' result. Which is right is the person's or their accountant's decision; explain both and let them choose. With only balance-sheet accounts the question does not arise.
+
+Every preview (`validate_only=true`) and every result states `posting_date`, `posting_period` and `posting_date_note`. **Before posting, tell the user the exact date** ("the opening entry will be dated 1 November 2026, period 2026-11") and get their agreement. After posting, read the stored date back (`get_imports(action="get_opening_balances", ...)` returns `posting_date`), not only the totals.
+
+Opening balances from a 31.12.2024 balance sheet with a 1 January cutover go to fiscal period **2025-01** (January of the new fiscal year). Check if the period exists:
 
 ```javascript
 query("fiscal_period", filters={"legal_entity_id": 12}, limit=50)
@@ -424,11 +440,15 @@ of their category accounts.
 
 ### Step 5: Verify
 
+Check the stored date first, then the amounts, on the opening date and the day before:
+
 ```javascript
-generate_report("trial_balance", {"legal_entity_id": 12, "as_of_date": "2025-01-01"})
+get_imports(action="get_opening_balances", legal_entity_id=12, fiscal_period_name="2025-01")  // posting_date
+generate_report("trial_balance", {"legal_entity_id": 12, "as_of_date": "2025-01-01"})  // the opening date
+generate_report("trial_balance", {"legal_entity_id": 12, "as_of_date": "2024-12-31"})  // the day before: no opening amounts
 ```
 
-Check: total debits = total credits, each line matches the user's balance sheet.
+Check: `posting_date` is the agreed date, total debits = total credits, each line matches the user's balance sheet on the opening date, and none of it shows the day before.
 
 ### The Balancing Account
 
@@ -439,7 +459,8 @@ The `balancing_account_number` (an equity account of the entity, e.g. its `retai
 1. **Forgetting accumulated depreciation**: Fixed assets at cost (a debit to the `fixed_asset_cost` account, e.g. 1500), accumulated depreciation as a separate credit (the `accumulated_depreciation` account, e.g. 1600)
 2. **Double-counting net income**: If the balance sheet already includes net income in retained earnings, don't add it again
 3. **Missing fiscal periods**: Always create periods before posting — don't post to wrong year
-4. **Using submit() instead of manage_imports()**: submit() doesn't handle auto-balancing or subledger detection
+4. **Dating the entry on the as-of month**: balances as at 31 October with a 1 November cutover belong in period 2026-11 (dated 1 November), not 2026-10 (dated 1 October)
+5. **Using submit() instead of manage_imports()**: submit() doesn't handle auto-balancing or subledger detection
 
 ---
 

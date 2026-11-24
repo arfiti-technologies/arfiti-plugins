@@ -17,7 +17,7 @@ Ask these questions in plain, friendly language. Explain WHY each matters.
    - If migrating: "Which accounting system are you coming from? (Merit Aktiva, QuickBooks Online, SmartAccounts, or something else?)"
    - This determines whether we can automate the migration (connector) or need manual imports
 
-3. **What is the cutoff date?** Explain: "This is the date your old system stops and Arfiti takes over. For example, if you close your books in the old system on December 31, 2025, your cutoff is 2025-12-31. All balances as of this date become your opening balances in Arfiti."
+3. **What is the cutoff date?** Explain: "This is the date your old system stops and Arfiti takes over. For example, if you close your books in the old system on December 31, 2025, your cutoff is 2025-12-31. All balances as of this date become your opening balances in Arfiti, dated the next day (2026-01-01), the first day Arfiti runs your books." Record both dates: the **as-of date** of the source balances (the cutoff) and the **opening date** in Arfiti (normally the day after). Never treat them as one date.
 
 4. **What does your business do?** "Knowing your industry helps me anticipate what accounts, vendors, and transaction types you'll need. For example, a SaaS company needs recurring revenue tracking, while a consulting firm needs project-based accounting."
 
@@ -240,6 +240,15 @@ Present findings conversationally: "Based on your balance sheet, I have a few qu
 
 ### Step 7: Upload Opening Balance
 
+**Agree the opening date first.** The opening entry is dated the first day of the fiscal period named in `fiscal_period_name`, unless `opening_date` names another day inside that period (`opening_balances` only; the subledger version always uses the period's first day). Balances as at the cutoff D with go-live on D+1 open on D+1: name the period containing D+1. A trial balance as at 31 October 2026 with a 1 November cutover goes to `fiscal_period_name="2026-11"`, dated 1 November; do not choose 2026-10 because the source is dated 31 October (that would date it 1 October). An entry dated 31 October is a separate choice the user must make explicitly (`fiscal_period_name="2026-10", opening_date="2026-10-31"`); a mid-period go-live such as 15 November uses `opening_date="2026-11-15"`.
+
+Before the upload, two checks:
+
+- **Existing opening entries in any period.** One opening entry per entity and period is enforced, but only per period: an entry already posted in another period (for example dated 1 October when the agreed opening is 1 November) is not refused. Look for them with `query("transaction", filters={"legal_entity_id": ENTITY_ID, "transaction_type": "OPENING_ENTRY"})`; if one is wrong, reverse it first. A refusal names the existing entry under `existing_opening_entry` with its own date.
+- **Profit-and-loss accounts at a fiscal-year boundary.** If the cutoff is the last day of a fiscal year and the trial balance still holds revenue or expense accounts (not yet closed to retained earnings), raise it before choosing the date. Dated the new year's first day, those lines fall into the new year and its income statement is marked incomplete until someone confirms them; dated the old year's last day (`opening_date`), they are prior-year result on the balance sheet. The person or their accountant decides; do not choose for them.
+
+Run the upload with `validate_only=true` first. Its answer states `posting_date` and `posting_period`: tell the user "the opening entry will be dated <posting_date> (period <name>)" and wait for their agreement before posting. Never describe the entry as "as at" a date other than its `posting_date`.
+
 Based on what details the user provided:
 
 **With subledger details (Tier 1 data provided):**
@@ -284,17 +293,19 @@ Explain the balancing account: "The equity account you chose absorbs the differe
 
 ### Step 8: Verify Opening Balance
 
-1. Run trial balance at cutoff date:
+1. Read back the stored date: the posting result's `posting_date`, or `get_imports(action="get_opening_balances", legal_entity_id=ENTITY_ID, fiscal_period_name="YYYY-MM")`. It must be the date the user agreed.
+2. Run the trial balance on the opening date, and on the day before it (which must show none of the opening amounts):
    ```
-   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "CUTOFF_DATE"})
+   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "OPENING_DATE"})
+   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "DAY_BEFORE_OPENING_DATE"})
    ```
-2. Compare each line with user's source balance sheet
-3. Flag discrepancies — common issues:
+3. Compare each line on the opening date with user's source balance sheet
+4. Flag discrepancies — common issues:
    - Retained earnings may differ (includes prior year net income — expected)
    - Rounding differences of a few cents (handled by balancing account)
    - Accounts not mapped correctly: find what the first import already saved (`get_imports(action="status", import_id=...)`, `query("transaction", ...)` for the opening entry) and correct those records or reverse the entry before importing again; never import the same lines twice
 
-**CP3a checkpoint**: Trial balance at cutoff date balances (debits = credits).
+**CP3a checkpoint**: The stored `posting_date` is the agreed opening date, and the trial balance on that date balances (debits = credits).
 **CP3b checkpoint**: Trial balance matches source balance sheet within rounding tolerance.
 **CP3c checkpoint**: Subledger records created — AR invoices, AP bills, FA register (if details provided).
 

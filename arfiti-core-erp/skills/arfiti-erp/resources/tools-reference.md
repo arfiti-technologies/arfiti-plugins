@@ -456,14 +456,18 @@ Write actions (`manage_imports`): `accounts`, `customers`, `dimension_hierarchy`
 manage_imports("accounts", records=[...], legal_entity_id=9, validate_only=true)
 manage_imports("standard_coa", legal_entity_id=9, template="us_gaap", confirmed=true)
 manage_imports("opening_balances", balances=[{"account_number": "1000", "debit": 50000}, ...],
-    legal_entity_id=9, fiscal_period_name="2025-01")
+    legal_entity_id=9, fiscal_period_name="2025-01")   // dated 2025-01-01, the period's first day
+manage_imports("opening_balances", balances=[...], legal_entity_id=9,
+    fiscal_period_name="2025-01", opening_date="2025-01-15")   // an agreed day inside the period
 manage_imports("opening_balances_with_subledger", balances=[...], legal_entity_id=9,
     fiscal_period_name="2025-01", balancing_account_number="3300",
     open_ar_items=[{"customer_name": "Acme", "reference_number": "INV-001", "amount": 5000, "invoice_date": "2024-11-15", "due_date": "2024-12-15"}],
     open_ap_items=[{"vendor_name": "Supplier", "reference_number": "BILL-042", "amount": 3200, "invoice_date": "2024-12-01", "due_date": "2025-01-15"}],
     fixed_assets_detail=[{"name": "Server", "acquisition_date": "2023-06-15", "original_cost": 15000, "accumulated_depreciation": 5000, "useful_life_months": 60}])
-get_imports("get_opening_balances", legal_entity_id=9, fiscal_period_name="2025-01")
+get_imports("get_opening_balances", legal_entity_id=9, fiscal_period_name="2025-01")   // posting_date = stored date
 ```
+
+> Opening balances: every preview and result states `posting_date` (and `posting_period`, `posting_date_note`). Balances as at D with a cutover on D+1 open on D+1, so name the period containing D+1; tell the user the exact date and get agreement before posting. See [bulk import](bulk-import.md#opening-balance-import).
 
 ### get_onboarding() / manage_onboarding()
 

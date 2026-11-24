@@ -6,6 +6,17 @@ Step-by-step guide to preparing and uploading opening balances.
 
 Opening balances represent the financial position of the company at the cutoff date — the moment the old system stops and Arfiti takes over. Every balance sheet account (assets, liabilities, equity) gets an opening entry. Income statement accounts (revenue, expense) are NOT included — they start at zero in Arfiti.
 
+## The Opening Date
+
+Keep two dates apart: the **as-of date** of the source balances (the cutoff, e.g. 31 October 2026) and the **opening date** the entry is dated in Arfiti (the cutover, normally the next day: 1 November 2026).
+
+- The opening entry is dated the first day of the fiscal period in `fiscal_period_name`, unless `opening_date` names another day inside it (`opening_balances` only).
+- Balances as at D with cutover D+1: name the period containing D+1 (31 October balances, 1 November cutover: `"2026-11"`, dated 1 November).
+- An entry dated the as-of date itself (31 October) only if the user explicitly agrees: `fiscal_period_name="2026-10", opening_date="2026-10-31"`. A mid-period cutover: `opening_date` on that day.
+- The preview (`validate_only=true`) and the result state `posting_date`. Tell the user that date and get agreement before posting; read it back afterwards.
+- Look for opening entries already posted in **any** period (`query("transaction", filters={"legal_entity_id": ID, "transaction_type": "OPENING_ENTRY"})`): the one-per-period guard does not see another period. Reverse a wrong one first.
+- Cutoff on a fiscal year's last day with revenue or expense accounts still in the trial balance: ask the person (or their accountant) whether the opening is the new year's first day (those lines then fall in the new year, whose income statement is marked incomplete until confirmed) or the old year's last day (prior-year result). Do not decide it for them.
+
 ## Prerequisites
 
 Before uploading opening balances, ensure:
@@ -123,16 +134,18 @@ manage_imports(
 
 After uploading, run these checks:
 
-1. **Trial balance**: `generate_report("trial_balance", {"legal_entity_id": ID, "as_of_date": "CUTOFF_DATE"})`
+1. **Stored date**: the result's `posting_date` (or `get_imports(action="get_opening_balances", ...)`) is the agreed opening date
+2. **Trial balance**: `generate_report("trial_balance", {"legal_entity_id": ID, "as_of_date": "OPENING_DATE"})`
    - Total debits MUST equal total credits
    - Each account balance should match the source document
+   - The day before OPENING_DATE shows none of the opening amounts
 
-2. **If subledger items provided:**
-   - AR aging: `generate_report("ar_aging", {"legal_entity_id": ID, "as_of_date": "CUTOFF_DATE"})` — each invoice visible
-   - AP aging: `generate_report("ap_aging", {"legal_entity_id": ID, "as_of_date": "CUTOFF_DATE"})` — each bill visible
+3. **If subledger items provided** (open items are dated the opening date too):
+   - AR aging: `generate_report("ar_aging", {"legal_entity_id": ID, "as_of_date": "OPENING_DATE"})` — each invoice visible
+   - AP aging: `generate_report("ap_aging", {"legal_entity_id": ID, "as_of_date": "OPENING_DATE"})` — each bill visible
    - Fixed assets: `query("fixed_asset", filters={"legal_entity_id": ID})` — each asset visible
 
-3. **Bank balances**: Compare system bank account balance vs actual bank balance at cutoff
+4. **Bank balances**: Compare system bank account balance on the opening date vs actual bank balance at cutoff
 
 ## Common Issues
 

@@ -168,7 +168,7 @@ Tell the user:
    3. **New business or moving from another system?** (Asked in Step 2; ask now only if it was not answered.) For a migration, offer the `arfiti-core-implementation-consultant` plugin (`/start-migration`). It needs the old system's name, the cutoff date, a trial balance at the cutoff, open customer and vendor invoices, and the fixed asset register if there is one.
 4. **Other next steps** — choose from:
    - Import vendors, customers, and employees (via CSV or manual entry)
-   - If migrating from a prior accounting system: import opening balances — see [Bulk Import: Opening Balance](../resources/bulk-import.md#opening-balance-import)
+   - If migrating from a prior accounting system: import opening balances — see [Bulk Import: Opening Balance](../resources/bulk-import.md#opening-balance-import). Keep the trial balance's as-of date apart from the opening (cutover) date: balances as at 31 October with a 1 November cutover open on 1 November (period 2026-11), not in October. Tell the user the exact `posting_date` the preview states, get their agreement before posting, and read the stored date back afterwards.
    - Set up payroll employees and compensation
    - Configure projects, dimensions, or budgets
 
