@@ -471,6 +471,10 @@ When a client org is created, partner owners and admins receive admin membership
 
 ## Invitation Flow
 
+On the Free plan an organisation has 25 users, counting pending invitations: the
+invitation that would make 26 is refused with a sentence saying so. Tell the user
+to revoke an invitation or remove a user, or to contact us for more; do not retry.
+
 Use `submit(object_type="organization_user", operation="invite", data='{...}')` or Admin Users & team. Payload:
 
 ```json

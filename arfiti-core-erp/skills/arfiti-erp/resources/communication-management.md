@@ -162,6 +162,8 @@ Use this tool to send email notifications from agents or when a human needs to b
 
 > **Requires write permission.** A read-only caller gets a permission error rather than sending the email — this only applies to interactive callers; agent-initiated sends run with the agent's own permissioned context.
 
+> **Counts toward the plan's business emails.** On the Free plan an organisation sends 100 business emails a calendar month. Once they are used, the email is not sent and the result says so with the plan's sentence; tell the user it was not sent and that it can go again from the 1st (or contact us for more). Do not retry it the same month.
+
 **What you write and what the server adds.** You write the subject and the body only. The server puts them in the standard email layout:
 
 - at the top, the organisation's name when it sends from its own verified domain, otherwise the Arfiti logo;
