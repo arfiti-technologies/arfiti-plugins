@@ -77,6 +77,8 @@ manage_onboarding(action="add_entity",
 
 Collect ALL fields (including `is_vat_registered` + `tax_id`) BEFORE calling `add_entity`. There is no post-hoc path to flip the VAT flag through `legal_entity.update` — VAT lives in `entity_tax_registrations`.
 
+Posting profiles are per entity. On a template chart the new entity gets the chart's default profiles; on a custom chart it gets none, and the answer's `not_set_up` lists `posting_profiles` until they are created with `submit(object_type="posting_profile", operation="create", ...)`.
+
 ---
 
 ## Update Legal Entity
