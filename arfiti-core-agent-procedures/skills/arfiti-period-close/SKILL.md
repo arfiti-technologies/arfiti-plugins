@@ -1,6 +1,6 @@
 ---
 name: arfiti-period-close
-description: Run the month-end close for one legal entity and fiscal period in Arfiti through the MCP tools only - collect the evidence for each standard check, report every finding with its evidence, decide which findings block from the client's own close rules (never from this skill), fix what ordinary operations or the helpers can fix, raise plain-language tasks for the rest, and close the period through submit(object_type="fiscal_period", operation="close") when asked and nothing the client calls blocking is open. Also resolves a paused built-in close saga. Never forces, never reopens, never locks.
+description: Run the month-end close for one legal entity and fiscal period in Arfiti through the MCP tools only - collect the evidence for each standard check, report every finding with its evidence, decide which findings block from the client's own close rules (never from this skill), fix what ordinary operations or the helpers can fix, raise plain-language tasks for the rest, and close the period through submit(object_type="fiscal_period", operation="close") when asked and nothing the client calls blocking is open. Never forces, never reopens, never locks.
 ---
 
 > **Without a roster (Cowork, Claude Code).** Where this skill hands work to the
@@ -11,10 +11,9 @@ description: Run the month-end close for one legal entity and fiscal period in A
 
 # Close one period
 
-Uses only what the public MCP tools can do. The paused-saga procedure is the
-last section here.
+Uses only what the public MCP tools can do.
 
-The close does not need the built-in month-end saga. `fiscal_period.close` is an
+The built-in month-end saga is removed. `fiscal_period.close` is an
 ordinary gateway operation: inside its own transaction it re-runs every
 registered check and refuses the close when an integrity check fails, when a
 check the organisation's close policy calls blocking fails, when a draft
@@ -51,10 +50,9 @@ looks small: report it with its evidence and let the rules decide.
 2. **Posted history is not edited.** Corrections are new documents through the
    ordinary operations (an adjusting entry, a reversal, a missing posting),
    only when the client's rules and the records settle them; otherwise a task.
-3. **Do not start the built-in saga.** A live `month_end_close` saga for the
-   period switches the close to the saga's severities and blocks a direct
-   close until the saga finishes. Start one
-   only if the client's rules ask for it.
+3. **No built-in saga.** The built-in month-end saga is removed; a saga row
+   left for the month changes nothing about the close. Never send
+   `_period_close` (refused by name).
 4. **Close only when asked.** The first message says `mode: check` or
    `mode: close`. In `check` mode nothing is closed, whatever the findings.
 5. **Idempotency and read-back.** Keys start with the prefix the first
@@ -64,8 +62,7 @@ looks small: report it with its evidence and let the rules decide.
 ## Inputs (first message)
 
 `organization_id`, `legal_entity_id`, `period_start`, `period_end`, `mode`
-(`check` | `close`), optional `saga_id` (a paused built-in saga to resolve
-instead), `answered_tasks`, `client_rules:`, `managed_session_id`, the
+(`check` | `close`), `answered_tasks`, `client_rules:`, `managed_session_id`, the
 idempotency prefix.
 
 ## Step 0: confirm the organisation, entity and period
@@ -375,10 +372,7 @@ journals, not part of a close).
   run, with the organisation's policy applied). Those are blocking by the
   client's policy: add them to the findings as `blocking (policy)`, resolve
   what you can, raise one `question` task for the rest ("October cannot be
-  closed yet because ..."), status `blocked`. A refusal naming
-  `close_saga.not_finished`: a built-in saga for the month is still active,
-  paused or failed; resolve it (last section) or ask whether to cancel it;
-  you do not cancel it.
+  closed yet because ..."), status `blocked`.
 
 `validate_only` does not run the close's checks (they run in the executor),
 so there is no dry run of the close itself; the evidence from step 2 is the
@@ -542,30 +536,11 @@ and what you need decided in everyday words, offer plain choices, and put
 check codes, account numbers and what you will do with each choice in
 `details` and the options' `note` for the accountant who reads it later.
 
-## A paused built-in close saga (`saga_id` in the first message)
-
-While the built-in saga still runs for some organisations, a session may be
-asked to clear what pauses it.
-
-1. `get_entity("saga", <saga_id>, include_related=true)`: `checkpoint_data`
-   (period, `pause_reasons`, `failed_phase_numbers`, retry log) and its
-   `phases`. Confirm it is this entity's `month_end_close`.
-2. From the failed phase's output and the pause reason, name the blocking
-   finding and confirm it with the step 2 calls for that check. The check
-   rows themselves (`period_close_checks`) are not readable (gap); if the
-   phase output does not name the check, report that and stop.
-3. Resolve it as step 4 says.
-4. Retry: `submit(object_type="saga", operation="retry_phase", data=JSON.stringify({"saga_id": "<uuid>",
-   "phase_number": N}), validate_only=true)`, then for real with the key
-   `<prefix>retry-<N>`. Read back the saga: the phase is running or complete.
-   The same finding again: report it; do not loop.
-5. Never cancel the saga, edit its state or close the period around it.
-
 ## Result
 
 ```
 PERIOD_CLOSE_RESULT
-status: closed | close_pending_approval | ready_to_close | blocked | checked | asked | already_closed | retried | wrong_scope
+status: closed | close_pending_approval | ready_to_close | blocked | checked | asked | already_closed | wrong_scope
 organization_id: <id>   legal_entity_id: <id>   period: <period_name> <start>..<end>   mode: <check|close>
 rules: <each rule used: check -> blocking|advisory, the rule's words>
 check: <group.code> <pass|fail|not_checked> <blocking|advisory> | <evidence: ids, counts, amounts> | <REACHABLE|PARTIAL|SAGA-ONLY>

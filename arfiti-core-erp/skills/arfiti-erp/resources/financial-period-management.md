@@ -1336,18 +1336,12 @@ This is a specific executor policy, not general permission to move invoice or
 journal dates silently. Inspect its returned posting evidence and current run status.
 
 
-### Period Close pipeline (2026-09-23 migration)
+### Built-in period close pipeline (removed)
 
-Period Close now uses mandatory prepare/evaluate/resolve/finalize stages, including
-stored hybrid definitions. Its saga, check registry and financial workflows remain
-authoritative. An approval submission keeps the final phase open; ten-minute
-durable continuations reuse the same command/workflow and verify the current closed
-period before completing. Unknown effects retain their identity for investigation.
-The bound final phase may close its own active saga only after other phases finish
-and current checks have no blocking failures; it never supplies `force`.
-Remediation still delegates to the specialist owner and rechecks after resolution.
-Domain `dry_run` records a diagnostic saga; pipeline `preview` performs no writes
-or model calls. Approval polling does not make another model memo call.
+The built-in period close pipeline and its month-end saga are removed (P-AR-42).
+A month closes with `fiscal_period.close`, the same way for every caller (see
+"Closing a period" below); the period close agent is a managed agent that
+collects the evidence and closes this way.
 
 Reporting evidence failures remain blocking where they affect opening or current balances. Use the returned transaction IDs to involve the accounting administrator. Historical posting/closing decisions are audited and do not repair missing booked amounts. Do not bypass this check or approve all legacy rows merely to finish a close.
 
@@ -1371,15 +1365,12 @@ Do not exclude or match voided rows just to satisfy a close check.
 scope; bank is not an accepted scope. Use the statement-line operations for banks.
 
 
-### Live close initiator
+### Built-in close runs (removed)
 
-Live close binds to the recorded saga creator (the authenticated creator for `saga.create`, or the persisted manual-run starter). The worker service user is not the accountant. Current membership, entity access and financial write permission are rechecked; payloads cannot select a different actor. A live run with no recorded initiator is refused; use a manual live run or diagnostic dry-run.
-
-For a legacy failed run with the service user pinned as its close actor, first verify no close workflow was submitted and the period remains open. Cancel the failed saga with the supported action and create a fresh live run. Do not edit checkpoints or use `force` to hide the identity failure. Preserve command IDs while submission outcome is pending or unknown; reconcile that outcome before restarting. See the period-close guide.
-
-### Close-agent deployment recovery
-
-After a close-agent implementation update, verify its active definition uses the intended release before starting a new live close. Retained v1.0.0 blocks preserve historical revision hashes; the initiating-accountant blocks are v1.0.1. A successful deployment does not itself activate a new agent revision. Have an authorized operator publish/activate the reviewed release. Preserve failed run evidence and use the supported cancellation/new-run flow; do not edit stored hashes or actor checkpoints.
+The built-in close agent's live runs, their initiating-accountant binding and
+its v1.0.0/v1.0.1 blocks are removed (P-AR-42). A month-end saga left over from
+them cannot advance: cancel it with `submit(object_type="saga", operation="cancel")`
+and close the month with `fiscal_period.close`. Do not edit its checkpoints.
 
 > **Production QA finding (2026-10-08):** A yellow lane does not by itself guarantee human approval. QA organization8266000 had zero steps on its `fiscal_period.close` definition17930; its live close auto-approved and closed the period. Configure and verify an explicit eligible review step before relying on a human approval gate. After adding an explicit administrator review step, task 133 was approved by the independent reviewer and the close saga completed. This is organization configuration, not a default guarantee.
 
@@ -1436,42 +1427,25 @@ colons. Missing/foreign records, invalid IDs and empty names withhold execution
 results. This follows current entity-scoped period reads without adding an
 accounting permission requirement. Readability does not prove current closure,
 locking, or permission to close/reopen a period. `close_command:<uuid>` refers to
-a saga checkpoint and remains part of pending cycle-safe saga verification.
+a checkpoint of the removed built-in month-end saga; it is read for history only.
 
 
 ## Closing a period (AR-461)
 
 `fiscal_period.close` re-runs every close check at the moment of closing and records what it saw.
-- If the month-end close saga ran for the month (not as a dry run), every check blocks as registered, and a close is refused while that saga is still running.
-- Otherwise (you, closing directly) only the integrity checks (period open, trial balance, reversal pairs, AP/AR control ties) and earlier open months block; the other checks are recorded as advisory unless the company's `period_close.policy.check_severity` makes them blocking.
+- Every close takes the same path, whoever closes: only the integrity checks (period open, trial balance, reversal pairs, AP/AR control ties) and earlier open months block; the other checks are recorded as advisory unless the company's `period_close.policy.check_severity` makes them blocking. A month-end saga left over for the month changes nothing (the built-in saga is removed); never send `_period_close`, it is refused.
 - Close earlier months first, or the close is refused. The company can allow out-of-order closing by saving `{"overrides": {"config_environment.earlier_periods_closed": "advisory"}}` (needs `accounting:close`).
 - Net pay paid after the month end fails `payroll.payroll_run_paid` unless the company saved `period_close.policy` / `payroll_settlement` `{"carry_unsettled_net_pay": true, "carry_from_period": "YYYY-MM"}`. Then, from that month, a run passes as carried when its payroll accrual is posted in the month and the carried net pay equals the accrued payroll balance exactly (functional-currency runs only; tax or benefit lines in the batch must be paid by the month end; the later net-pay payment is not checked). If it still fails, report the two amounts; do not post anything to make them match.
 - `force: true` with `force_reason` closes despite failing *policy* checks, never integrity ones, and only when a person holding `accounting:close` submits or approves it. As an agent, do not force; tell the user which checks fail and ask them to fix the records, change the policy, or force it themselves.
 - A close refused by its checks comes back as `refused: true` with an `error` code (`close_integrity_failed`, `close_checks_failed`, `close_policy_invalid`, `close_drafts_exist`, `close_trial_balance_unbalanced`) and `detail.failing_checks`; nothing was written and the month is still open. Tell the user which checks failed. A forced close that fails still returns an outcome-unknown envelope; read its reason in `get_submissions(action="history", workflow_id=...)`. After fixing the cause, resubmit with a new `idempotency_key`: the same key replays the first answer.
 
-## A paused month-end close saga (AR-462)
+## A paused month-end close saga
 
-The close saga delegates no fix-up work. When a blocking check fails, the saga pauses, and the failed phase's `error_message` names the checks and what each needs. For example: "Blocking close checks remain unresolved: depreciation_run. Needs: run_depreciation (no handler configured)."
-
-The phase output's `resolution_required` lists the same items, with kinds:
-- `action`: run the named operation;
-- `evidence`: correct the records;
-- `check`: the check did not run, so retry it.
-
-The saga's `checkpoint_data.pause_reasons` says why each failed phase paused:
-- `resolution_required`;
-- `execution_failed` (the run ended without a result);
-- `credits_exhausted`;
-- `agent_disabled`;
-- `remediation_rejected`;
-- `stale_wait`;
-- `period_closed`.
-
-To continue:
-1. Do the work with the normal tools, or ask the user to.
-2. Call `submit(object_type="saga", operation="retry_phase", data=JSON.stringify({saga_id, phase_number}))`. The checks run again, and the phase completes only if they pass.
-
-A retry after credits are topped up, or after an agent is switched back on, also re-runs the other phases stopped for that reason. There is no "mark resolved" operation. Whether a check applies is a policy or `force` decision at close (above).
+The built-in month-end saga is removed (P-AR-42): nothing runs its phases, so
+`saga.retry_phase` on one reactivates it but its checks never run again. Do not
+retry it. Cancel it with `submit(object_type="saga", operation="cancel",
+data=JSON.stringify({saga_id, reason}))`, fix the records with the normal tools,
+and close the month with `fiscal_period.close`, which re-runs every check itself.
 
 ## Close evidence update (b1, awaiting deployment)
 

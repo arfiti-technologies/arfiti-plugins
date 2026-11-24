@@ -303,112 +303,16 @@ that workers were drained. Final backfill needs a separately reviewed deployment
 controller and verified worker-output manifest; no production adapter exists yet.
 
 
-Local AR464 candidate only: `reconciliation.match` may carry a server-prepared
-`owned_bundle` reference with the exact immutable proposal. It still uses current
-entity/permission and configured workflow approval controls; the reference is not
-approval. Do not invent bundle IDs, bypass a pending approval, or resubmit an
-unknown attempt with a fresh financial identity. The local strict
-`owned_bundle_proposal` input accepts a run, ordered exact match proposals and
-configuration; preparation checks current configured authority before retaining
-an attempt and then uses the existing workflow approval path. Validation-only
-never prepares. Retry the original raw request/key to recover its exact saved
-attempt. If workflow creation failed, a current-authorized
-`bundle_recovery_payload` can be explicitly submitted through normal approval;
-this references the same attempt and does not allocate a replacement. Follow a
-verified `bundle_workflow_id` instead when present. Recovery does not execute
-finance or prove no effect. New orchestration adoption and deployment remain
-open. A receipt is historical committed evidence, not proof that a later undo
-has not occurred.
-
-
-Candidate native blocks1.2 retain the original worklist before submitting owned
-bundles and distinguish approval waiting, unknown recovery, partial and complete
-outcomes. They are not current/activated. Never treat a waiting agent's cached
-summary as final application evidence, or reset a dispatching continuation to
-force another attempt. Current authority is checked on continuation; no completed
-agent bypass is provided. The periodic host resumes waiting stages and finalizes
-existing optional saga origins through exact stored identity/generation checks.
-A completion storage failure retries without another financial application.
-There is no new reconciliation request type or mandatory saga. For explicit
-abandoned-owner recovery, get the exact scoped `reconciliation_run` and submit its
-`native_continuation.recovery_payload` through `reconciliation.match`. Never invent
-or reset its owner/generation. This uses configured approval and rechecks the
-original caller key/entity scope plus target native authority. Busy means a live
-dispatch owns the fence; pending/approved-unresolved workflows retain their
-original approval. Fenced no-effect attempts require review and cannot reuse old
-approval. A committed receipt is reconciled without reposting. No elapsed-time
-inference or completed-agent authority bypass is available. Release/activation
-remain open in the canonical AR464 plan.
-
-For candidate 1.2 partial runs, read `summary.owned_bundle_outcome_v1`: completed
-run status does not mean every proposal applied. Confirmed refused/rolled-back
-bundles retain unapplied review members and precise attempt reasons; unknown or
-pending bundles do not. Use `applied_count`, `items_review`, `items_blocked` and
-`bundles_blocked` according to their distinct member/bundle units. Replay does not
-duplicate review rows. Changed/missing review evidence requires recovery. Never
-write off an unapplied review item or use undated run void for dated applications.
-The explicitly approved date is retained in shared application receipts/history;
-no date or accounting policy is inferred. Candidate activation remains absent.
-
-Draft762 clone/transaction-rollback readiness has disposable test evidence only.
-It does not authorize deployment, evidence deletion, or activation of1.2. Current
-pipeline pins remain1.1. Follow the canonical plan's remaining mixed-worker drain
-and compatibility requirements before a release; preserve committed receipts.
-
-
-### Mixed retained/candidate admission (local, not activated)
-
-With draft762 installed, the current shared application-capacity helper checks
-active owned-bundle source claims under the existing source admission lock.
-Only the actual executing attempt in the same database transaction is exempt;
-a matching payload token grants nothing. Conflicting admission refuses without
-waiting on the reverse lock order. Installed storage requires read committed
-isolation; without762 the retained helper behavior is unchanged.
-
-The current call-site census covers reconciliation single-match and batch writers
-(shared by retained1.0/1.1 and candidate1.2), and posted-payment adoption. It does
-not cover arbitrary SQL, every application producer, or old deployed binaries
-without this helper. Such workers require explicit operational drain before
-candidate work is admitted. Do not disable current authorization needed to finish
-pending approvals as a substitute for stopping new dispatch.
-
-Code rollback must retain owned intents, claims, workflows, continuations and
-committed receipts, and leave a compatible path to settle existing work. Inventory
-must classify unresolved prepared/executing/unknown attempts, pending approvals,
-active claims and unsettled continuations separately from retained committed
-receipts. Empty observed work is not proof that external workers have stopped.
-No committed-data uninstall or production drain has been performed.
-
-
-### Owned application undo and current summaries
-
-Candidate1.2 retains the original committed bundle receipt after a supported
-explicitly dated unmatch. That receipt proves historical execution; it is not
-permission to reapply the original attempt. Re-invocation holds for review of
-current application/authorized undo evidence and emits no new completion event.
-A legitimate undo does not itself require another financial rollback.
-
-Completion rereads application state rather than presenting saved committed
-counts as currently active. A complete read with every original member inactive
-proves zero current applications. If changed bundle evidence includes active or
-missing members, current count/amount totals are unavailable, not zero:
-`applied_count_available=false`, `applied_amount_available=false`, nullable totals,
-and an explicit review message. The run's scalar accounting counters retain their
-last projection in that unavailable case; consumers must use the availability
-flags in `summary.owned_bundle_outcome_v1` for current interpretation. Historical
-committed member count and immutable receipts remain separate. No retained
-pipeline version or current registration was changed.
-
-Dashboard run totals represent the latest recorded run observation, not a live
-recalculation after every later accounting action. Reconciliation/card run lists
-and details, the reconciliation timeline, and card aggregate statistics now honor
-owned summary availability and observed values before scalar columns. Available
-owned zero overrides an older scalar amount; unavailable totals display
-“Unavailable” without a zero or match percentage. Ordinary rows without an owned
-summary retain recorded values; missing or blank amount evidence is unavailable,
-while an explicitly recorded zero remains zero. Independent undo does not automatically
-refresh a saved run observation; a fresh completion readback can return newer
-observations without rewriting past completion events.
+Owned-bundle matches and native runs were removed (P-AR-42 step 3b, Nov 2026);
+production never recorded one. `reconciliation.match` refuses `owned_bundle_proposal`,
+`owned_bundle` and `native_continuation_recovery` by name and writes nothing: use
+the ordinary match with `source_transaction_id`, `applications` and an explicit
+`application_effective_date`. `get(reconciliation_run)` no longer returns
+`native_continuation`. The bundle tables and guards stay: a source under an active
+bundle claim is refused by every application writer, `void_run` refuses a run with
+an unresolved bundle, and reverse-charge repair refuses a bill inside a claim.
+Run totals honour `summary.owned_bundle_outcome_v1` availability flags where a
+summary carries them; unavailable totals display "Unavailable", never zero.
 
 
 ### Owned card purchase undo (2026-10-23)
@@ -604,11 +508,7 @@ production deployment, policy approval or pipeline activation.
 ### Cancelling a partial run and finalizing void
 
 `agent_instance.cancel` stops cancellable orchestration; it does not reverse
-committed accounting. Independent committed bundles remain readable and retain
-their receipts. A cancelled native instance cannot dispatch new owned financial
-work; delayed financial approval must still pass current native authority and
-cannot revive it. Unresolved attempts/claims remain visible until supported
-recovery proves their outcome. Cancellation is never a no-effect certificate.
+committed accounting. Cancellation is never a no-effect certificate.
 
 For a completed partial reconciliation run, `reconciliation.void_run` refuses
 while dated applications remain active. First use the supported explicitly dated
@@ -629,7 +529,7 @@ retention certification. It preserves failed/manual-review members and all
 original receipts/history; it does not dismiss those records. Public same-key
 replay returns the prior result without another financial effect.
 
-Current shared retained1.0/1.1 and candidate1.2 writers fence terminal voided runs:
+Current shared retained 1.0/1.1 writers fence terminal voided runs:
 financial applications, review/card records and summary writes cannot reopen the
 run. Contention refuses without waiting on an inverted run lock; retry after the
 other owner finishes, using current evidence. Completed nonvoided runs retain
@@ -644,10 +544,8 @@ production worker shutdown are not certified by the local tests.
 The bank and card run pages distinguish a submitted or pending void workflow from confirmed finalization. They show “Run voided” only when the gateway returns successful executor evidence for the requested run and an explicit item count. Approval alone, unknown recovery status, or missing completion evidence stays unconfirmed; no absent count becomes zero. The workflow reference and status remain in the router response. This changes notification wording, not approval policy or financial undo: dated owned applications still require their explicit authorized undo before run finalization.
 
 
-### Owned match approval retains original authority
+### Void approval retains original authority
 
-Owned `reconciliation.match` submissions retain the authenticated originating key, entity scope and exact saved approval payload in private immutable submission evidence. Delayed approval rechecks that original key's current validity and scope, current caller permissions and configured entity policy before effects. A configuration writer conflicting with the permission fence causes refusal, not execution under a stale policy. Legacy match requests without `owned_bundle` retain their existing route.
+`reconciliation.void_run` on a tenant with migration 762 retains the authenticated originating key, entity scope and exact saved approval payload in private immutable submission evidence. Delayed approval rechecks that original key's current validity and scope, current caller permissions and configured entity policy before effects.
 
-Owned matching requires reviewed 762 storage, including the private immutable submission guard. Missing or altered guards/ACLs refuse before execution. Previously pending owned workflows without retained submitter evidence remain unexecuted and require explicit review/recovery of their existing attempt. Do not infer authority from the approver or create a fresh financial attempt to bypass this hold; inspect existing receipt/attempt evidence first. No deployment, worker drain or repair of historical pending submissions is performed by this implementation.
-
-The same exact native submission identity/retention prerequisite applies when installed762 void or native recovery reads that shared evidence. A missing primary key, conditional or disabled retention trigger, altered retention function, or nonprivate grants makes that capability unavailable; it does not widen authority. Tenants without762 retain the existing nonowned legacy void route.
+The exact submission identity/retention prerequisite applies when void reads that evidence. A missing primary key, conditional or disabled retention trigger, altered retention function, or nonprivate grants makes that capability unavailable; it does not widen authority. Tenants without762 retain the existing nonowned legacy void route.
