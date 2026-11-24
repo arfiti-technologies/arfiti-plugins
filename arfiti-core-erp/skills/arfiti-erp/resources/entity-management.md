@@ -51,6 +51,8 @@ manage_onboarding(action="start",
     tax_jurisdiction="us_sales_tax",
     fiscal_year_start_month=1
 )
+# Show the person read_back, wait for their yes, then record it:
+manage_onboarding(action="confirm_choices", confirmation_token="...", person_reply="Yes, correct")
 # Then run waves until complete:
 manage_onboarding(action="run_wave")  # repeat while next_tasks lists runnable work
 ```

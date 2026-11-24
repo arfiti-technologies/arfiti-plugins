@@ -47,7 +47,7 @@ Arfiti exposes 24 tools. Read-only tools never change anything; write tools ask 
 | `get_imports` | read | Progress of an async import; opening balances. | `get_opening_balances`, `status` |
 | `manage_imports` | write | Bulk imports of master data, transactions and opening balances. | `accounts`, `customers`, `dimension_hierarchy`, `dimension_types`, `dimension_values`, `employees`, `fixed_assets`, `items`, `opening_balances`, `opening_balances_with_subledger`, `standard_coa`, `transactions`, `vendors` |
 | `get_onboarding` | read | Onboarding status, checklist and import format help. | `check_status`, `get_checklist`, `get_support`, `verify_team_member` |
-| `manage_onboarding` | write | Run onboarding, add a legal entity, load demo data. `get_summary` is here because it can finalize onboarding. | `add_entity`, `get_summary`, `initialize_entity`, `load_demo_data`, `reset`, `run_wave`, `start`, `update_task` |
+| `manage_onboarding` | write | Run onboarding, add a legal entity, load demo data. `get_summary` is here because it can finalize onboarding. | `add_entity`, `confirm_choices`, `get_summary`, `initialize_entity`, `load_demo_data`, `reset`, `run_wave`, `start`, `update_task` |
 | `get_organization` | read | Organization info, roles and client orgs. | `get_clients`, `get_info`, `get_rate_limit`, `list_orgs`, `list_roles`, `list_user_roles` |
 | `manage_organization` | write | Create or switch organizations, client orgs and keys, remove roles. | `create`, `create_client`, `create_client_key`, `remove_role`, `repair_template_data`, `switch`, `update` |
 

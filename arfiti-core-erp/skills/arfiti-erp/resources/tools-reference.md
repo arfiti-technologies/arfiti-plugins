@@ -479,16 +479,20 @@ manage_onboarding(action, legal_entity_id?, task_key?, new_status?, support_type
 
 Read actions (`get_onboarding`): `check_status`, `get_checklist`, `get_support`, `verify_team_member`
 
-Write actions (`manage_onboarding`): `add_entity`, `get_summary`, `initialize_entity`, `load_demo_data`, `reset`, `run_wave`, `start`, `update_task`
+Write actions (`manage_onboarding`): `add_entity`, `confirm_choices`, `get_summary`, `initialize_entity`, `load_demo_data`, `reset`, `run_wave`, `start`, `update_task`
 
 `get_summary` is a write action: when every task is done it finalizes onboarding. Its authority rule is unchanged. There is no skill package to download: this guide is the `arfiti-core-erp` plugin, installed from the marketplace `arfiti-technologies/arfiti-plugins`.
 
 ```javascript
 manage_onboarding(action="start", country_code="US", accounting_standard="us_gaap_standard",
-    tax_jurisdiction="us_sales_tax")   // first entity: omit legal_entity_id
+    tax_jurisdiction="us_sales_tax", fiscal_year_start_month=1)   // first entity: omit legal_entity_id
+// show the person read_back, wait for their reply, then:
+manage_onboarding(action="confirm_choices", confirmation_token="...", person_reply="Yes, correct")
 manage_onboarding(action="run_wave")   // repeat while next_tasks lists runnable work
 get_onboarding(action="get_support", support_type="import_accounts")
 ```
+
+`start` saves the choices and runs nothing. Its answer has `read_back` (each choice as given), `confirmation_token` and `confirm_call`; `run_wave` is refused with `choices_not_confirmed` until `confirm_choices` records the person's reply to that read-back. Country, chart, tax template and fiscal-year start have no default: `confirm_choices` is refused (`material_choices_missing`) while one is missing, so ask and call `start` again, which returns a new read-back and token. VAT registration may stay unanswered (no registration is created).
 
 A wave advances one legal entity's checklist. When more than one entity has open onboarding tasks, pass the entity: `manage_onboarding(action="run_wave", legal_entity_id=12)`; without it the call is refused and lists each entity with its open task count. Each answer's `next_tasks` carries `legal_entity_id`, and its message names the exact call to make next. `update_task` takes `legal_entity_id` the same way when two entities share the task.
 

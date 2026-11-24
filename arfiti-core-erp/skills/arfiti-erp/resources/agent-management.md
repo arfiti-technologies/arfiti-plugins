@@ -221,7 +221,12 @@ Each agent definition includes:
 agent_type          # Unique identifier (e.g., "bill_processor")
 name                # Display name
 description         # What the agent does
-is_enabled          # Whether the agent is active
+effective_status    # Whether work addressed to it is processed now: enabled, disabled,
+                    # not_set_up (managed, no agent named), archived, retired. Read this.
+runtime             # "managed" (a managed agent runs it) or "builtin"
+kind                # "agent" or "automation" (fixed-logic job)
+is_enabled          # The BUILT-IN runtime's switch only: false on every managed agent,
+                    # so it does not say whether the agent runs
 execution_mode      # "llm", "code", "hybrid", or "pipeline"; distinct from model_tier
 model_tier          # LLM tier: "fast" (Haiku)
 config              # Behavior settings (thresholds, flags)
