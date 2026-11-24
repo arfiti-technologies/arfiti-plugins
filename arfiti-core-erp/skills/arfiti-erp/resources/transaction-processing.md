@@ -1246,13 +1246,15 @@ query("transaction", query="Acme",
 
 Use `query` for GROUP BY / SUM / COUNT queries without pre-built reports.
 
-**Total spend by vendor (AP invoices):**
+**Total spend by vendor (AP invoices):** a reversed bill keeps its stored
+amount with `status` `reversed`, and a draft is not spend, so filter on status.
+For what is still owed, use `generate_report("ap_aging")`, not `amount_due`.
 ```javascript
 query(
   entity_type="bill",
   group_by=["vendor_name"],
   aggregates={"amount": "sum", "id": "count"},
-  filters={"legal_entity_id": 10},
+  filters={"legal_entity_id": 10, "status": ["posted", "partial", "partially_paid", "paid", "reconciled"]},
   sort_by="sum_amount",
   limit=10
 )
