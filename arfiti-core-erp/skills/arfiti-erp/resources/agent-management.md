@@ -2311,8 +2311,17 @@ organization/entity-scoped defaults. Non-admin users start with no grants.
 Access includes historical and future outputs, including sensitive payroll data,
 but does not authorize payroll records or business actions.
 
-The deployed implementation provides Roles → Agent access and Agent → Access over one
-grant store with audited changes. Reader integration shipped with PR403; production rollout was verified on 2026-10-20. The canonical workflow
+Owners and admins manage these grants on the agent's page, in the **Viewer access** tab
+(after Permissions; AR-1461), over one grant store with audited changes: an entity scope
+(All entities, or one entity), then Roles and People, each grant saved as it is ticked.
+A grant for All entities is stored with no entity and still reaches only the entities
+each person can access. A person who also holds a granted role keeps access after their
+direct grant is removed; the tab shows that access in its Through role column. The
+agents' own service roles (roles held by an agent's no-sign-in user) are not offered and
+`agentAccess.grant` refuses them: no person holds them, so a grant would reach no one; an
+earlier grant to one is listed as having no effect and can be removed. The Roles page
+entry was removed with the old team role routes on 2026-10-30.
+Reader integration shipped with PR403; production rollout was verified on 2026-10-20. The canonical workflow
 and permissions plan tracks producer scope, reader parity, tests and rollout.
 
 
