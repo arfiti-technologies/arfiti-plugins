@@ -871,7 +871,9 @@ get_entity("managed_agent_run", id="<run id>")   # adds kickoff, final_report, u
 `state`: `claimed`, `started`, `running`, `finished`, `stopped` (budget used or the session
 ended early), `failed` (never started; `error` says why). `cost_cents` is the list cost so
 far; `charged_cents` is how much of it was charged to the organisation's AI credits when the
-run ended (`charge_note` says why a cost was not charged). With no AI credits left no
+run ended (`charge_note` says why a cost was not charged). Both are list cost; the credits are
+charged that times 1.40. `reserved_cents` is the credit an open run holds so two runs never
+spend the same credit. With no AI credits left no
 session starts: the event and the run are `failed` with that reason, and after a top-up
 `submit(object_type="agent_event", operation="retry", data=JSON.stringify({"event_id": "..."}))` starts it. Reading needs
 `accounting:read`. Full contract: GUIDE_MANAGED_AGENT_RUNS.
