@@ -381,7 +381,7 @@ submit(object_type="api_key", operation="revoke", data=JSON.stringify({
 }))
 ```
 
-Permanently revokes the key. This action cannot be undone. The key stops working on its next request. Allowed while the organisation is still being set up, so an unused initial key can be revoked before onboarding completes. An agent's key is refused here: use `agent_api_key.revoke`. People can also revoke an ordinary key from its quick view under Configuration → API keys.
+Permanently revokes the key. This action cannot be undone. The key stops working on its next request. Allowed while the organisation is still being set up, so an unused key can be revoked before onboarding completes. An agent's key is refused here: use `agent_api_key.revoke`. People can also revoke an ordinary key from its quick view under Configuration → API keys.
 
 ### Querying API Keys
 
@@ -465,7 +465,7 @@ Current owners/admins of partner organizations can create client organizations a
 manage_organization(action="create_client", client_name="Acme Corp", client_slug="acme")
 ```
 
-When a client org is created, partner owners and admins receive admin membership in it. Ordinary partner members are not propagated.
+When a client org is created, partner owners and admins receive admin membership in it. Ordinary partner members are not propagated. No API key is created: a signed-in partner admin switches to the client org. A connection that uses an API key stays on its own organisation and needs a key for the client, which a person creates in the dashboard (Configuration → API keys) and enters in the client's own settings. `create_client_key` also creates one but returns it once in its tool result, so prefer the dashboard; never read a key back into the chat.
 
 ---
 
@@ -1951,18 +1951,37 @@ regression does not certify hosted OAuth reconnect or provider revocation.
 
 ### MCP company creation and initial credentials
 
-The current manage_organization(action="create") confirmation preview discloses
-that confirmed creation always issues an initial API key, including when the
-caller signs in with OAuth. It expires after 365 days and carries read, write
-and delete without a narrower key entity filter. Effective access remains bounded
-by the creator's current membership, roles and entity access. The unconfirmed
-preview generates no key and provisions no company. The confirmed response shows
-the plaintext key once; handle it as a credential.
+Since AR-1447 (Andrew's ruling, 2026-11-24) company creation issues no API key.
+`manage_organization(action="create")` creates the organisation and its schema
+with the caller as owner, and a partner's
+`manage_organization(action="create_client")` makes the partner's owners and
+admins admins of the client organisation. Neither creates a key; the preview
+and the result say so (`api_key_created: false`) and never carry one. Until
+2026-11 both issued a 365-day read/write/delete key and returned it in plain
+text in the tool result; keys issued then still work until they expire or are
+revoked.
 
-There is currently no key-free option on this action. Whether key issuance should
-become optional or separate remains an owner decision (ONB-023); this disclosure
-does not change key lifetime, scope or issuance policy. Admin onboarding/signup
-uses separate routes and is not described by this MCP creation contract.
+How to reach the new organisation:
+
+- **Signed in (OAuth):** switch to it with
+  `manage_organization(action="switch", organization_id=<id>)`.
+- **A connection that uses an API key** stays on the organisation its key
+  belongs to; switching does not move it. It needs a key for the new
+  organisation, which a person creates in the dashboard under Configuration →
+  API keys (allowed at any time, also while onboarding is incomplete) and
+  enters in the client's own settings.
+- `manage_organization(action="create_client_key", client_organization_id=<id>)`
+  also creates a client key, but returns it once in its tool result, so the
+  dashboard is preferred. `submit(object_type="api_key", operation="create", data=...)`
+  stays blocked until onboarding completes.
+
+A key is a credential: never read out or pasted into a chat. An unused key can
+be revoked at any time, including before onboarding completes:
+`submit(object_type="api_key", operation="revoke", data=JSON.stringify({"key_id": <id>}))`,
+or Revoke key in the key's quick view under Configuration → API keys (AR-1368,
+AR-1369). It stops authenticating on its next request; a fresh read shows it
+revoked. Admin onboarding/signup uses separate routes and is not described by
+this MCP creation contract.
 
 
 Dashboard workflow CSVs use the currently returned summary/list data; they are

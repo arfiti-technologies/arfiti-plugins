@@ -107,7 +107,7 @@
       "name": "arfiti-core-country-setup",
       "source": "./arfiti-core-country-setup",
       "description": "Configure a live Arfiti company for its country through the Arfiti connector: tax codes, authorities, registrations, filing calendars, withholding, payroll taxes and expense rates, researched from official sources, confirmed with you, applied through the submit gateway and read back. Also helps author your own country payroll and VAT plugins.",
-      "version": "3.0.2",
+      "version": "3.0.3",
       "category": "configuration",
       "keywords": [
         "onboarding",
@@ -122,7 +122,7 @@
       "name": "arfiti-core-erp",
       "source": "./arfiti-core-erp",
       "description": "Core operating skill for the Arfiti ERP: post, query, report and run workflows through the Arfiti MCP connector, with a domain guide for each area of the ledger.",
-      "version": "2.0.130",
+      "version": "2.0.131",
       "category": "accounting",
       "keywords": [
         "erp",

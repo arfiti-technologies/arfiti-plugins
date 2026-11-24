@@ -40,8 +40,11 @@ author a country plugin, or `/set-up-country`, `/author-country-plugin`.
    types, `tax_code`, `tax_authority`, `tax_jurisdiction`, `tax_registration`,
    `account` and `vendor` — and refuses the rest (withholding rates, reporting
    periods, filing forms, payroll taxes, expense rates…) with
-   `organization_not_onboarded`. Finish onboarding first, or limit the session
-   to the accepted types and say so.
+   `organization_not_onboarded`. Once every required onboarding step is done,
+   the answer says `posting_allowed: true` and `submit` accepts the rest too,
+   even while an optional step (payroll, agents, master-data imports, expense
+   rates) is still pending or failed. Otherwise finish onboarding first, or limit the session to the
+   accepted types and say so.
 3. **What did onboarding leave open?**
    `get_onboarding(action="get_checklist", status="skipped")` — without a
    category filter, because country tasks sit under `tax`, `payroll` and
