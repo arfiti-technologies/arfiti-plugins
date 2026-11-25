@@ -238,7 +238,7 @@ When the user says “start onboarding”, first call `get_onboarding(action="ch
 4. Create attachment metadata — `submit(object_type="attachment", operation="create", data='{...}')`
 5. Generate upload link — `submit(object_type="attachment", operation="generate_upload_url", data='{...}')`
 6. Attach the file — route by where the bytes are AND whether you can reach the server (never by size):
-   - **File in your environment, and `curl` to the upload URL works** (Claude Code on a normal network) → `curl -sf -F "file=@<path>" "<upload_url>"`, which stores and confirms in one step.
+   - **File in your environment, and `curl` to the upload URL works** (Claude Code on a normal network) → upload it yourself with `curl --fail --show-error --form "file=@<path>" "<upload_url>"` (a multipart POST of the file to the link), which stores and confirms in one step.
    - **File in your environment but the upload URL is unreachable** — the usual case in a **Cowork** sandbox, which has no route to the ERP host — → give the user the upload link from step 5 and say what it is for. You cannot put a file into Drive to transfer it; the Drive route below only pulls a file that is already there.
    - **File already in the org's connected Google Drive folder** → skip the upload entirely. Find the connector with `query("connector", filters={"provider": "gdrive"})`, then `read_attachment(storage_url="connector://<connector_id>/<drive_file_id>", content_type="application/pdf")` (use the file's real MIME type). That stores the bytes and returns a `stored_url` you can pass on.
 

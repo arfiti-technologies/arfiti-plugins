@@ -13,14 +13,11 @@ Presents the server's trial balance as of a date.
 /arfiti:trial-balance
 ```
 
-Requires Python 3.9+ (`python3 --version`) when a formatter runs.
-
 ## Rules
 
 - Add `"report_contract": 1` to every `generate_report` call and save the result **unchanged** as JSON. Never retype amounts, re-classify accounts, sum rows into totals or round them.
 - A `null` amount is **Unavailable**, never zero. Show every evidence gap, warnings included.
 - If the result is `success: false`, show its message (for example `REPORT_SCOPE_FORBIDDEN`: the user has no access to that entity) and stop.
-- If the formatter exits with code 2, show its reason and fix the request; do not work around it.
 
 ## Step 1: Fetch
 

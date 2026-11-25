@@ -30,7 +30,7 @@ not grant a task agent permission to inspect arbitrary files.
 
    | Who holds the bytes | Route |
    |---|---|
-   | **You, on disk, and your environment has outbound network** (Claude Code) | `curl -sf -F "file=@<path>" "<upload_url>"` |
+   | **You, on disk, and your environment has outbound network** (Claude Code) | Upload it yourself: `curl --fail --show-error --form "file=@<path>" "<upload_url>"` (a multipart POST of the file to the link) |
    | **You, but you cannot reach the endpoint** (Cowork), or the file only exists in the chat | Hand the user the upload link from step 4 |
    | **The user, in their inbox** | Ask them to forward it to the org's document intake address |
    | **The user, at a computer, on the record's own page** | Ask them to upload it there |
@@ -137,8 +137,10 @@ When a user uploads a file directly to Claude.ai:
 ┌─────────────────────────────────────────────────────────────┐
 │  STEP 5: Attach the Original File                            │
 │                                                              │
-│  File on disk + shell access (Cowork / Claude Code)?         │
-│    curl -sf -F "file=@invoice.pdf" "<upload_url>"            │
+│  File on disk + shell access (Claude Code)?                  │
+│    POST the file to the link as a multipart form:            │
+│    curl --fail --show-error                                  │
+│         --form "file=@invoice.pdf" "<upload_url>"            │
 │    → stored in R2 + linked automatically. Then tell user:    │
 │    "I've created AP invoice #1234 for $5,432.10 from Acme.   │
 │     Original PDF attached. Status: {result.status}."         │
@@ -286,8 +288,10 @@ submit(object_type="attachment", operation="generate_upload_url", data=JSON.stri
 
 If the user's file exists as a real file in your working environment — Cowork and Claude Code place chat attachments in your working directory — and you can run shell commands, **upload it yourself instead of handing the user the link**:
 
+The command sends the user's file to the one-time `upload_url` from step 4 as a multipart form (an HTTP POST); it downloads and runs nothing:
+
 ```bash
-curl -sf -F "file=@/path/to/acme_invoice_jan2025.pdf" "https://mcp.arfiti.com/api/upload/abc123def456..."
+curl --fail --show-error --form "file=@/path/to/acme_invoice_jan2025.pdf" "<upload_url>"
 ```
 
 - Success returns `{"success": true, "attachment_id": ..., "file_size": ..., "content_hash": ...}`. The file is stored in R2 and linked to the attachment automatically — **no `confirm_upload` call needed**.
@@ -564,9 +568,9 @@ submit(object_type="attachment", operation="generate_upload_url", data=json.dump
 
 **Step 5: Attach the file, then respond**
 
-In Cowork / Claude Code (the uploaded file is in your working directory):
+In Claude Code (the uploaded file is in your working directory and the upload host is reachable; in Cowork hand the user the link instead):
 ```bash
-curl -sf -F "file=@acme_invoice.pdf" "https://mcp.arfiti.com/api/upload/abc123..."
+curl --fail --show-error --form "file=@acme_invoice.pdf" "<upload_url>"
 ```
 ```
 I've created AP invoice #1234 for Acme Corporation:
@@ -631,7 +635,7 @@ list("attachment", {
 
 ## Important Notes
 
-1. **Upload it yourself only where you actually can** - In Claude Code the chat attachment is on disk and egress works, so `curl -sf -F "file=@<path>" "<upload_url>"` attaches it with zero user effort. **In Cowork it does not**: egress to `mcp.arfiti.com` is blocked, so the link is not a fallback there, it is the only route you can initiate. Check which you are before promising the user anything.
+1. **Upload it yourself only where you actually can** - In Claude Code the chat attachment is on disk and egress works, so uploading it yourself with `curl --fail --show-error --form "file=@<path>" "<upload_url>"` attaches it with zero user effort. **In Cowork it does not**: egress to `mcp.arfiti.com` is blocked, so the link is not a fallback there, it is the only route you can initiate. Check which you are before promising the user anything.
 
 2. **Generate upload link immediately** - Don't wait for transaction approval. The file upload is independent.
 

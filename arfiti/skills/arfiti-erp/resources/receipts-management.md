@@ -569,17 +569,13 @@ invoice concern, not a receipt one. See
 - [Reconciliation Management](reconciliation-management.md) — how a charge is matched to a bill
 
 
-### Follow-up block retention (2026-10-06; deployment pending)
+### Follow-up runs on an older agent revision
 
-The original Bill follow-up module is retained byte-for-byte as bill_followups_v1.py for pinned v1.0.0 stages. Current follow-up stages register v1.0.1; new prepared releases select it. Existing revisions remain unchanged until a reviewed compatible release is activated. The retained summary may still omit an old pending-posting result; inspect its structured outcome. Version retention never removes current authorization checks.
+A saved agent revision stays as it is until a newer compatible release is activated, and a Bill follow-up run pinned to an older revision behaves as that revision did: its summary may omit a pending-posting result, so read the run's structured outcome rather than the summary, and its emails may carry earlier footer wording. Older revisions never skip current authorization checks.
 
 
 ## Card receipt posting and dimension recovery (2026-10-06)
 
-Documentation acceptance, source GL posting and AP settlement are independent. If a receipt has already produced a bill but the card charge is unposted, process the existing source through the Bank agent in card mode, scoped by `legal_entity_id` and `card_transaction_ids`. Verify `posted_transaction_id`; then link the existing bill through `card_purchase.manage` and settle through `reconciliation.match` with scope `ap` and the current purchase version. Do not create another bill or manually adjust expense accounts to bypass this sequence. QA verified source1 -> CARD000001/49 -> Bill48 -> reclassification50.
+Documentation acceptance, source GL posting and AP settlement are independent. If a receipt has already produced a bill but the card charge is unposted, process the existing source through the Bank agent in card mode, scoped by `legal_entity_id` and `card_transaction_ids`. Verify `posted_transaction_id`; then link the existing bill through `card_purchase.manage` and settle through `reconciliation.match` with scope `ap` and the current purchase version. Do not create another bill or manually adjust expense accounts to bypass this sequence.
 
 The dimension-context change is implemented but awaits deployment verification. Cardholder defaults are used only when the transaction workflow enables `employee` as a dimension default source. A receipt uses its exact stored attachment-to-card link within the same entity; the cardholder is resolved for the posting date. Ambiguous links/history refuse processing. Explicit dimension values take precedence; reviewed Bill dimensions remain frozen. Business-purpose text is not a structured dimension assignment, and an employee's defaults do not automatically supply a project or override a product. Configure required dimensions and review missing values instead of assuming successful posting proves complete classification.
-
-### Domain migration retention (2026-10-28)
-
-The v1.0.1 follow-up module is also pinned by saved revisions and must remain byte-for-byte stable, including presentation text. Configure `DASHBOARD_URL=https://app.arfiti.com` for the new dashboard links; shared sender mapping supplies migrated platform addresses. Historical follow-up email footers may retain the previous brand wording. Changing that footer requires a separately versioned implementation and reviewed activation, never rewriting stored hashes or bypassing deployment preflight.

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Present AR or AP aging from the server report (report_contract 1).
 
 Usage:

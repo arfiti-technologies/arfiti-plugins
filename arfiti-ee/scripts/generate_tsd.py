@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """generate_tsd.py — Estonian TSD (monthly tax declaration) XML generator for e-MTA.
 
 Implements the real e-MTA XSD (tsd_schema_01.01.2025_eng.xsd):

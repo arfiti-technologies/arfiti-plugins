@@ -1,6 +1,6 @@
 ---
 name: dimension-analysis
-description: Present a P&L by department, project or other dimension: one server income statement per dimension value, an untagged column and the entity total, without adding the columns up. Uses format_dimension_analysis.py.
+description: "Present a P&L by department, project or other dimension: one server income statement per dimension value, an untagged column and the entity total, without adding the columns up. Uses format_dimension_analysis.py."
 ---
 
 # P&L by Dimension

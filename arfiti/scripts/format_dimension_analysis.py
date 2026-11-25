@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Present a P&L by dimension value from server reports (report_contract 1).
 
 Usage:

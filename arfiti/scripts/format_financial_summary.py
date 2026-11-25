@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Present a one-page financial summary from server reports (report_contract 1).
 
 Usage:

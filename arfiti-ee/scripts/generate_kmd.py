@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 generate_kmd.py — Generate the Estonian VAT return (KMD) in the official KMD2 format.
 

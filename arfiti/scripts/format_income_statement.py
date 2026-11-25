@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Present an income statement (P&L) from the server report (report_contract 1).
 
 Usage:
