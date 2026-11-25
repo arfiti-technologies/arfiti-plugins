@@ -1557,4 +1557,7 @@ readers, but editing requires the server-derived `canEdit` hint: current members
 write access plus `master_data:write`. A Controller label alone is not a write grant.
 Read-only users see no Save or approval prompt; save errors remain inline. The hint
 does not replace current backend authorization or authorize payment execution.
-Supplier notes remain low-authority context, submitted through `vendor.update`.
+Supplier notes remain low-authority context, submitted through `vendor.update`. A master-scope note edit may carry
+`bill_config_expected_versions: {"master": <version read>, "entity": null}`;
+if the vendor's bill configuration changed since that version, `vendor.update`
+refuses and writes nothing. Read the vendor again and redo the edit.
