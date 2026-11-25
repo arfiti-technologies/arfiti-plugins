@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.arfiti-technologies/arfiti",
+  "title": "Arfiti",
+  "description": "Work with your company's accounting records, financial reports and approval workflows over OAuth.",
+  "websiteUrl": "https://arfiti.com/docs/getting-started",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.arfiti.com/streamable/mcp"
+    }
+  ]
+}
