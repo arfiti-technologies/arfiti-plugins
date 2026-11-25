@@ -287,9 +287,13 @@ semantics rather than treating a link as documentation-only.
 
 - `amount` is functional currency in whole cents. For `acquisition`/`improvement`
   it defaults to the line's posted asset cost not yet allocated to other assets.
-- All acquisition and improvement links on one line together never exceed the
-  line's posted asset cost; an over-allocation is refused with the available
-  amount. Re-linking the same asset and line replaces its own amount.
+- All capital links on one line together (acquisition, improvement, CWiP and
+  expense capitalizations) never exceed the line's posted asset cost; an
+  over-allocation is refused with the available amount. Re-linking the same
+  asset and line replaces its own amount; repeating the same link changes nothing.
+- An `acquisition` link records where an existing asset's cost came from; it does
+  not change the asset's cost. An asset entered by hand and then linked to its
+  bill for its full cost completes the asset request for that bill line.
 - An `improvement` raises the asset cost and the book's acquisition cost and NBV,
   and re-spreads the scheduled lines from the improvement's source date over the
   same remaining periods of the selected book, net of its recognised depreciation
@@ -418,7 +422,39 @@ Use the `fixed_asset.capitalize_cwip` workflow when construction is complete.
 }
 ```
 
-**GL Impact:** Yes - DR Asset, CR CWiP
+**GL Impact:** Yes - DR Asset, CR CWiP, in functional currency
+
+**What can be capitalised:** only cost posted to the CWiP account on the listed sources that no
+asset has taken yet. A source can be any current posted line with cost on the CWiP account
+(bills, journals, opening balances, card purchases). The workflow refuses, with nothing written,
+when:
+- no source is listed, or a listed transaction is not current and posted, is listed twice, is
+  dated after the capitalization date, or has no cost on the CWiP account (it is never skipped);
+- the CWiP account has older lines without functional amounts (they must be repaired first);
+- `total_amount` is more than what is still available on the sources (a foreign-currency bill
+  counts at its functional cost; amounts already taken by other assets through any capital link
+  are subtracted) or more than the CWiP account's balance;
+- the CWiP or asset account is not an asset-cost account, or both are the same account.
+
+The refusal lists each source line with its posted, already capitalised and available amounts.
+
+**Partial capitalization:** with `bill_ids` alone the amount must be everything still available,
+or the sources must hold one open line. To capitalise part of the cost spread over several lines,
+send `source_lines` with each line's share (they must add up to `total_amount`):
+
+```json
+"source_lines": [
+  {"transaction_id": 101, "transaction_line_id": 201, "amount": 600.00},
+  {"transaction_id": 101, "transaction_line_id": 202, "amount": 100.00}
+]
+```
+
+How to split a partial amount is the accountant's decision; ask rather than choosing a split
+yourself. What is left on a line stays available for the next capitalization.
+
+**Reversal:** `transaction.reverse` of a capitalization journal is refused while its asset
+stands. No operation yet undoes a capitalization together with its asset; tell the user instead
+of trying another route.
 
 ---
 
@@ -744,7 +780,9 @@ Assets can be linked to any transaction type:
 - Credit card transactions
 - Bank transactions
 
-Link types: `acquisition`, `improvement`, `repair`, `maintenance`, `capitalized_expense`
+Link types for `link_source_transaction`: `acquisition`, `improvement`, `repair`, `maintenance`,
+`other`. `capitalized_expense` and `capitalization_entry` links are written only by
+`capitalize_expense` and `capitalize_cwip`.
 
 
 ### Asset journal currency and period controls
