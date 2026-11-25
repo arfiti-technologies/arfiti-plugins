@@ -611,6 +611,7 @@ submit(object_type="transaction", operation="reverse", data=JSON.stringify({
 2. A new reversing transaction is created with swapped DR/CR GL lines — document AND functional/reporting amounts, so every report nets the pair (reversals written before 2026-09-08 carried document amounts only and were invisible to reports; repaired 2026-10-01)
 3. Dimensions are copied from the original to the reversing transaction
 4. Both transactions are linked via `reversed_by_id` / `reversal_of_id`
+   - A link is returned only where it resolves for you: the linked transaction is in the same legal entity and you may read it (a payroll reversal needs payroll access). Otherwise `query` and `get_entity` return the link as `null`, and filtering on it finds nothing. A `null` link on a `REVERSAL` row means the pointer is missing, malformed or outside your access: report it, do not guess the original from dates or amounts.
 5. A reversed transaction can no longer be voided; a reversal is read under the permission of the transaction it reverses (a payroll reversal needs `payroll:read`)
 
 ### Success Response
