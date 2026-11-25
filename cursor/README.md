@@ -6,7 +6,7 @@ Connect Cursor to your Arfiti company to look up invoices, check supplier balanc
 
 Install the Arfiti plugin in Cursor and complete Arfiti sign-in when the MCP connection asks for authorization. Your Arfiti role and legal-entity access determine which records you can see.
 
-For the connector alone, use [Add Arfiti MCP to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=arfiti&config=eyJ1cmwiOiJodHRwczovL21jcC5hcmZpdGkuY29tL3N0cmVhbWFibGUvbWNwIn0%3D) or add the URL from [mcp.json](./mcp.json) in Cursor’s MCP settings. Choose one installation method to avoid duplicate connections.
+For the connector alone, use [Add Arfiti MCP to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=arfiti&config=eyJ1cmwiOiJodHRwczovL21jcC5hcmZpdGkuY29tL3N0cmVhbWFibGUvbWNwIn0%3D) or add the URL from [mcp.json](../mcp.json) in Cursor’s MCP settings. Choose one installation method to avoid duplicate connections.
 
 ## Try a first question
 

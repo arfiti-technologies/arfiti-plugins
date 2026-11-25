@@ -1,10 +1,12 @@
 {
   "name": "arfiti-plugins",
-  "owner": { "name": "Arfiti" },
+  "owner": {
+    "name": "Arfiti"
+  },
   "plugins": [
     {
       "name": "arfiti",
-      "source": "cursor/arfiti",
+      "source": ".",
       "description": "Connect Cursor to your Arfiti finance workspace."
     }
   ]

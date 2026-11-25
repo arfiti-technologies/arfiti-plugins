@@ -1,8 +1,10 @@
 {
   "name": "arfiti",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Look up accounting records, review balances and trace financial reports in your connected Arfiti company.",
-  "author": { "name": "Arfiti" },
+  "author": {
+    "name": "Arfiti"
+  },
   "homepage": "https://arfiti.com",
   "license": "MIT",
   "logo": "assets/icon.png"
