@@ -126,8 +126,13 @@ human eyeballing and appear in no output file.
 > enters the calculation. For a full-deduction taxpayer the RC output and
 > deduction cancel (refund unchanged); a partial-deduction taxpayer puts only
 > the deductible portion in line 5 while line 4 carries the full self-assessed
-> VAT. `generate_kmd.py` rejects inputs whose lines 6+7 exceed the rate-line
-> bases.
+> VAT. `generate_kmd.py` rejects inputs whose positive acquisition parts (6.1
+> goods, 6 − 6.1 services, 7.1, 7 − 7.1, each counted separately) exceed the rate-line bases. The rate lines are signed: a month of credits only
+> declares a negative rate line and is generated (AR-1473); with acquisitions and
+> credits in one month, `rate_line_negative_bases` (the negative `taxable_amount`
+> rows of `vat_report`'s `output_vat_details` at the six rates) lets the check
+> compare lines 6/7 with the rate lines' positive part. A negative line is
+> XSD-valid; e-MTA's acceptance is confirmed at upload.
 >
 > **History:** an earlier version of this skill (when it was the separate VAT plugin) prescribed the opposite
 > ("bases only on 6/7, never grossed into lines 1/5"). Both conventions yield

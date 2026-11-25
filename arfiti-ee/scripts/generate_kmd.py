@@ -48,8 +48,12 @@ breakout, but they do NOT drive the calculation — a base that appears only the
 never enters the return's arithmetic. For a full-deduction taxpayer the RC output
 (in line 4) and deduction (in line 5) cancel; a partial-deduction taxpayer puts
 only the deductible portion in line 5 while line 4 still carries the full
-self-assessed VAT. validate() rejects inputs whose lines 6+7 exceed the rate-line
-bases (the acquisitions cannot then be inside the rate lines).
+self-assessed VAT. validate() rejects inputs whose positive acquisition parts
+(line 6.1, line 6 - 6.1, line 7.1, line 7 - 7.1, each counted separately) exceed the rate-line bases (the acquisitions cannot then be inside the rate
+lines). The rate lines are signed, so a month of credits only is a negative base,
+not an error (AR-1473); with acquisitions and negative rate-line rows in one month
+the input states those rows' sum (`rate_line_negative_bases`), the acquisitions are
+compared with the positive part, and the stated figure is printed for the person.
 
 NOTE: an earlier version of this script prescribed the opposite ("bases only on
 6/7, never grossed") — for full-deduction taxpayers both conventions produce the
@@ -298,8 +302,9 @@ def compute_totals(body: dict) -> Dict[str, Decimal]:
     Compute line 4 (total VAT), line 12 (VAT due) and line 13 (overpaid) the way e-MTA
     does — for the console summary only. These are NOT emitted in the CSV or XML.
 
-    line 4  = Σ(base × rate) over the six domestic standard rates (SALES only; reverse
-              charge on lines 6/7 is excluded).
+    line 4  = Σ(base × rate) over the six standard-rate lines, which include the
+              reverse-charge / IC-acquisition bases (informative lines 6/7 are not
+              added again).
     net     = line4 + adjustmentsPlus − inputVatTotal − adjustmentsMinus.
     line 12 = max(0, net)   (payable);  line 13 = max(0, −net)   (overpaid).
     """
@@ -397,31 +402,25 @@ def validate(data: dict) -> List[str]:
         if key in body and dec(body[key]) < 0:
             errors.append(f"declaration_body.{key} must be >= 0")
 
-    if dec(body.get("euAcquisitionsGoods", 0)) - dec(
-        body.get("euAcquisitionsGoodsAndServicesTotal", 0)
-    ) > TOLERANCE:
+    # Line 6.1 (goods) is part of line 6 (goods and services); the services part is
+    # line 6 - 6.1. A positive 6.1 above line 6 is refused, as before AR-1473. A
+    # negative 6.1 (an EU supplier's goods credit) is not compared: inside a credit line
+    # 6 it is a smaller-or-equal credit, and beside an EU services purchase it can be
+    # below line 6 legitimately (goods -500, services +400, line 6 -100). Netting of
+    # goods against services cannot hide an acquisition missing from the rate lines,
+    # because the rate-line check counts each positive part separately
+    # (_positive_acquisitions). Whether a positive 6.1 above line 6 (goods bought, EU
+    # services credited) is declared that way is not settled by the sources; it stays
+    # refused for a person.
+    goods = dec(body.get("euAcquisitionsGoods", 0))
+    line_6 = dec(body.get("euAcquisitionsGoodsAndServicesTotal", 0))
+    if goods > TOLERANCE and goods - line_6 > TOLERANCE:
         errors.append(
             "declaration_body.euAcquisitionsGoods (line 6.1) cannot exceed "
             "euAcquisitionsGoodsAndServicesTotal (line 6)"
         )
 
-    # Lines 6/7 are INFORMATIVE breakouts of acquisitions that must also sit
-    # inside the rate lines (line 1 etc.) — that is what produces the
-    # self-assessed VAT in e-MTA's line 4. If the informative total exceeds the
-    # rate-line bases, the acquisitions cannot be inside them: structural error.
-    rc_total = sum(
-        (dec(body.get(k, 0)) for k in REVERSE_CHARGE_BASE_ELEMENTS), Decimal("0")
-    )
-    rate_total = sum((dec(body.get(k, 0)) for k in LINE4_RATES), Decimal("0"))
-    if rc_total - rate_total > TOLERANCE:
-        errors.append(
-            f"reverse-charge/IC-acquisition bases on informative lines 6+7 "
-            f"({rc_total:.2f}) exceed the rate-line bases ({rate_total:.2f}). "
-            f"Per EMTA guidance the acquisitions must be INCLUDED in the rate "
-            f"lines (e.g. transactions24) — lines 6/7 are informative only and "
-            f"do not enter the calculation. Add the acquisition bases to the "
-            f"rate lines and their deductible VAT to inputVatTotal (line 5)."
-        )
+    errors += _validate_acquisitions_inside_rate_lines(data, body)
 
     errors += _validate_annex(data.get("sales_annex"), "sales_annex",
                               "buyerRegCode", "buyerName", "invoiceSum", "taxRate")
@@ -430,6 +429,135 @@ def validate(data: dict) -> List[str]:
                               "vatInPeriod")
     errors += _validate_cash_accounting_columns(data)
     return errors
+
+
+def _positive_acquisitions(body: dict) -> Decimal:
+    """The acquisitions declared on lines 6 and 7, each part counted only when
+    positive: line 6.1 (EU goods), the rest of line 6 (EU services, line 6 - 6.1),
+    line 7.1 (immovables, scrap metal, gold: VAT Act § 41¹) and the rest of line 7
+    (line 7 - 7.1). Netting would let a credit in one part (a non-EU supplier's credit,
+    an EU services credit) hide acquisitions in another part that are missing from the
+    rate lines."""
+    zero = Decimal("0")
+    total = zero
+    for whole_key, part_key in (
+            ("euAcquisitionsGoodsAndServicesTotal", "euAcquisitionsGoods"),
+            ("acquisitionOtherGoodsAndServicesTotal",
+             "acquisitionImmovablesAndScrapMetalAndGold")):
+        whole, part = dec(body.get(whole_key, 0)), dec(body.get(part_key, 0))
+        total += max(zero, part) + max(zero, whole - part)
+    return total
+
+
+def _stated_negative_bases(data: dict) -> Optional[Decimal]:
+    """`rate_line_negative_bases` as a Decimal, None when absent; validated elsewhere."""
+    value = data.get("rate_line_negative_bases")
+    if value in (None, "") or not is_number(value):
+        return None
+    return dec(value)
+
+
+def _validate_acquisitions_inside_rate_lines(data: dict, body: dict) -> List[str]:
+    """
+    Lines 6/7 are INFORMATIVE breakouts of acquisitions that must also sit inside the
+    rate lines (line 1 etc.); that is what produces the self-assessed VAT in e-MTA's
+    line 4 (module docstring). When the acquisitions declared on lines 6/7 exceed what
+    the rate lines can hold, they cannot be inside them: structural error.
+
+    The rate lines are signed: a credit invoice, a negative line or a cancellation
+    reduces the base of the period it is declared in, and the bundled XSD types every
+    rate line, line 5 and lines 6/7 as a signed MonetaryValue (only lines 10/11 are
+    non-negative). So the comparison is made only where it can find an omission
+    (AR-1473):
+
+      * lines 6.1, 6 - 6.1, 7.1 and 7 - 7.1 are each counted only when positive. When
+        none is, nothing is
+        declared as acquired, so nothing can be missing from the rate lines: a month of
+        credits only, or of credits exceeding sales, generates with negative rate lines.
+      * a positive part is compared with the rate lines' positive part. The
+        input may state `rate_line_negative_bases`: the sum of the negative
+        `taxable_amount` rows of vat_report's `output_vat_details` that map to the six
+        rate lines, split by acquisition part where one tax name covers several (self-
+        assessed reverse charge is on that side already; rows of `input_vat_details`
+        are never added). The positive part is the rate-line total
+        less that amount. Without it the positive part is the signed total, the
+        comparison made before AR-1473.
+
+    The stated figure cannot be checked against the ledger here; it can only be
+    bounded (zero or below, at least as negative as the rate lines). main() therefore
+    prints it whenever it decided the comparison, for the person to tie to vat_report.
+    """
+    errors: List[str] = []
+    acquisitions = _positive_acquisitions(body)
+    rate_total = sum((dec(body.get(k, 0)) for k in LINE4_RATES), Decimal("0"))
+
+    negative = data.get("rate_line_negative_bases")
+    if negative in (None, ""):
+        negative_bases = Decimal("0")
+    elif not is_number(negative):
+        return [f"rate_line_negative_bases must be a number with a dot decimal, "
+                f"got {negative!r}"]
+    else:
+        negative_bases = dec(negative)
+        if negative_bases > 0:
+            errors.append(
+                f"rate_line_negative_bases ({negative_bases:.2f}) must be zero or "
+                "negative: it is the sum of the negative taxable_amount rows of "
+                "vat_report's output_vat_details at the six rate lines, signed"
+            )
+            return errors
+        if rate_total - negative_bases < -TOLERANCE:
+            errors.append(
+                f"the rate lines total {rate_total:.2f}, but rate_line_negative_bases "
+                f"states only {negative_bases:.2f} of negative bases: the rate lines "
+                "cannot be more negative than the negative bases inside them. Recheck "
+                "both figures against vat_report"
+            )
+            return errors
+
+    if acquisitions <= 0:
+        return errors
+
+    positive_part = rate_total - negative_bases
+    if acquisitions - positive_part > TOLERANCE:
+        if negative_bases < 0:
+            held = (f"the positive part of the rate-line bases ({positive_part:.2f}: "
+                    f"total {rate_total:.2f} less rate_line_negative_bases "
+                    f"{negative_bases:.2f})")
+        else:
+            held = f"the rate-line bases ({rate_total:.2f})"
+        errors.append(
+            f"reverse-charge/IC-acquisition bases on informative lines 6/7 (positive "
+            f"lines {acquisitions:.2f}) exceed {held}. Per EMTA guidance the "
+            "acquisitions must be INCLUDED in the rate lines (e.g. transactions24); "
+            "lines 6/7 are informative only and do not enter the calculation. If the "
+            "ledger's acquisitions are missing from the rate lines, include them there "
+            "and their deductible VAT in inputVatTotal (line 5). If the rate lines are "
+            "lower because vat_report has negative rows at those rates this period "
+            "(credit invoices, negative lines, cancellations), state their sum in "
+            "rate_line_negative_bases and show those rows to the person. Never add an "
+            "acquisition, or change a recorded amount, to pass this check."
+        )
+    return errors
+
+
+def negative_bases_notes(data: dict) -> List[str]:
+    """The note main() prints when `rate_line_negative_bases` decided the lines 6/7
+    comparison: the figure cannot be verified by the script, so the person sees it."""
+    body = data.get("declaration_body", {}) or {}
+    negative_bases = _stated_negative_bases(data)
+    acquisitions = _positive_acquisitions(body)
+    if negative_bases is None or negative_bases >= 0 or acquisitions <= 0:
+        return []
+    rate_total = sum((q2(body.get(k, 0)) for k in LINE4_RATES), Decimal("0"))
+    return [
+        f"rate_line_negative_bases {q2(negative_bases):.2f} was used: the positive lines "
+        f"6/7 ({q2(acquisitions):.2f}) were compared with the rate lines' positive part "
+        f"{rate_total - q2(negative_bases):.2f} (total {rate_total:.2f} less the stated "
+        "negative bases), not with the total. The script cannot verify that figure. "
+        "Show it with the negative output_vat_details rows of vat_report it came from "
+        "before filing."
+    ]
 
 
 def domestic_reverse_charge_warnings(data: dict) -> List[str]:
@@ -553,7 +681,7 @@ def reverse_charge_warnings(data: dict) -> List[str]:
     and the deductible side inside inputVatTotal (line 5) — see module docstring.
     """
     body = data.get("declaration_body", {}) or {}
-    rc = sum((q2(body.get(k, 0)) for k in REVERSE_CHARGE_BASE_ELEMENTS), Decimal("0"))
+    rc = q2(_positive_acquisitions(body))
     if rc <= 0:
         return []
     warnings = [
@@ -2042,7 +2170,8 @@ def main() -> None:
     else:
         print("  Net VAT: EUR 0.00")
 
-    for warning in reverse_charge_warnings(data) + domestic_reverse_charge_warnings(data):
+    for warning in (reverse_charge_warnings(data) + domestic_reverse_charge_warnings(data)
+                    + negative_bases_notes(data)):
         print(f"\nNOTE: {warning}")
 
     print("\nUpload the CSV at maasikas.emta.ee (or the XML). Deadline: 20th of next month.")

@@ -236,6 +236,17 @@ is worth the whole document total and must never be added.
   KMD. (Not "3.1 / 3.2" — 3.2 is export, never on the VD.)
 - All monetary values have 2 decimals and are non-negative where the XSD requires
   (`adjustmentsPlus` / `adjustmentsMinus`).
+- Rate lines, `inputVatTotal` and lines 6/7 may be negative (credits, negative lines,
+  cancellations); a month of credits only is generated with negative bases. A positive
+  line 6.1 must not exceed line 6 (goods bought with an EU services credit goes to a
+  person); a negative 6.1 (goods credit) is not compared.
+- Positive acquisition parts (6.1 goods, 6 − 6.1 services, 7.1, 7 − 7.1, each
+  counted separately; a credit in one does not offset another) must not exceed the rate-line bases (their positive part when `rate_line_negative_bases` is
+  stated); `rate_line_negative_bases` must be ≤ 0 and at least as negative as the rate
+  lines (enforced by the script). Fix by including the ledger's acquisitions in the rate
+  lines or stating the negative `output_vat_details` rows at the six rates, never by
+  adding an acquisition. When the figure was used the script prints it — **WARN**: show
+  it with its `vat_report` rows before filing.
 
 ---
 

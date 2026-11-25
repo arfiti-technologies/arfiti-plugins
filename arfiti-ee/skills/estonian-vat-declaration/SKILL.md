@@ -484,9 +484,33 @@ taxable **bases** by rate (except the input-VAT lines, which are VAT amounts). U
 
 **Reverse charge / acquisitions:**
 - The acquisition bases go **inside the rate lines** (add them to `transactions24` etc.) — per EMTA guidance the rate lines include IC acquisitions and reverse-charge services; that is what drives e-MTA's self-assessed line 4. Their deductible VAT goes into `inputVatTotal` (line 5).
-- `euAcquisitionsGoodsAndServicesTotal` (line 6): informative breakout — goods + services acquired from **EU** suppliers; `euAcquisitionsGoods` (6.1) is the goods subset
+- `euAcquisitionsGoodsAndServicesTotal` (line 6): informative breakout — goods + services acquired from **EU** suppliers; `euAcquisitionsGoods` (6.1) is the goods subset (both signed: an EU credit invoice makes them negative, and the services part is line 6 − 6.1; when goods and services carry opposite signs 6.1 can be below or above line 6. The generator accepts a negative 6.1, and refuses a positive 6.1 above line 6, goods bought with an EU services credit, as it did before: that month goes to a person)
 - `acquisitionOtherGoodsAndServicesTotal` (line 7): informative breakout — services received from **non-EU** suppliers + domestic reverse charge
-- Lines 6/6.1/7/7.1 are informative only; the generator rejects inputs whose 6+7 exceed the rate-line bases
+- Lines 6/6.1/7/7.1 are informative only; the generator rejects inputs whose positive acquisition parts (6.1 goods, 6 − 6.1 services, 7.1, 7 − 7.1, each counted separately) exceed the rate-line bases (the acquisitions cannot then be inside them); a credit in one part does not offset an acquisition in another
+
+**Signed bases (credits):** `vat_report` gives bases and VAT signed (credit notes,
+negative lines and reversals negative); map them to the KMD lines as they are. A credit
+invoice reduces the rate line of the period it is declared in (references/kmd-form-structure.md:
+lines 1² / 1¹ carry credit invoices for earlier supplies), so a month whose only activity
+is a sales credit declares a negative rate line (e.g. `transactions24: -1000.00`, overpaid
+VAT 240.00). The generator accepts any signed value the XSD allows: rate lines, line 5,
+lines 6/7 and line 9 are signed amounts; only lines 10/11 are non-negative. The sources in
+this skill do not say more than that for a negative line 5 (a supplier's credit invoice),
+line 6 / 6.1 (an EU supplier's credit invoice) or line 9 (a § 41¹ credit): map them by
+Step 1 as for any other row, and tell the person that e-MTA's acceptance of a negative
+line is confirmed only when the return is uploaded. Never add an acquisition or change a
+recorded amount to make a negative month generate.
+
+When the same month has a positive acquisition part **and** negative rows at the rates of
+lines 1–2², pass `rate_line_negative_bases`: the sum of the negative `taxable_amount` rows
+of `vat_report`'s `output_vat_details` that map to `transactions24/22/20/13/9/5`, signed
+(≤ 0), taken after the Step 2 split: where one tax name covers EU goods and EU services
+(or line 7.1 and the rest of line 7), split its row with the document lines by those
+parts first, so a goods credit and a services purchase are not netted into one row. Self-assessed reverse charge is already on the output side; never add rows from
+`input_vat_details`. The generator then compares lines 6/7 with the rate lines' positive
+part (total less that amount) and still refuses acquisitions missing from the rate lines.
+It cannot verify the figure, so it prints it: show it at CP3 with the rows it came from.
+Omit it (or 0) when no row at those rates is negative.
 
 **Exempt / adjustments:**
 - `supplyExemptFromTax` (line 8)
@@ -496,7 +520,8 @@ taxable **bases** by rate (except the input-VAT lines, which are VAT amounts). U
 derives them from the bases + `inputVatTotal`, and there are no XSD elements for them.
 `generate_kmd.py` computes them for the CSV / summary automatically.
 
-**CP3 checkpoint**: Present the completed main form. Sanity-check that
+**CP3 checkpoint**: Present the completed main form, and `rate_line_negative_bases` with
+the `vat_report` rows it sums when you pass it. Sanity-check that
 `Σ(base × rate) − inputVatTotal` gives the expected net VAT (payable if positive,
 refundable if negative).
 
