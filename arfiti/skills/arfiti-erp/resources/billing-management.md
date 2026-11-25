@@ -1786,6 +1786,14 @@ page collected: an EU business whose VAT number the EU VIES register confirms
 gets the reverse-charge rule; a number VIES does not confirm stops the top-up
 with a sentence (correct it, or remove it to be charged VAT).
 
+**Before a top-up is confirmed (AR-1484).** The form shows the AI credit the
+buyer receives (USD at the ECB rate of the day, with its date), the euro total,
+the VAT position and the refund terms, worked out by the same tax rule, basis
+and calculator the invoice posting uses; the webhook then grants exactly the
+quoted credit. Every top-up price includes any VAT, so the invoice total is
+the amount charged. Purchased credit has no expiry date. When a customer asks
+about a top-up, answer from their ledger and invoice, not from an expiry rule.
+
 Each item's revenue account is the item's own `revenue_account_number`, and the
 tax code is read as the billing entity sees it (`v_tax_codes_effective`). A
 malformed value is refused when saved. A checkout the setting cannot answer is
