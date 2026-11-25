@@ -70,7 +70,13 @@ allow-list also covers other master data).
   documents keep the code and the tax they were posted with.
 - A code needs its tax account: `default_tax_account_number`, or both
   `sales_account_number` and `purchase_account_number` (an `exempt` code needs
-  none). The accounts are the customer's choice by type and subtype.
+  none). The accounts are the customer's choice by type and subtype, and must
+  be tax accounts (AR-1460; refused otherwise, at `validate_only` too): the
+  sales side (`sales_account_number`, else the default) `vat_payable` or
+  `sales_tax_payable`, `vat_payable` for a reverse-charge code's explicit
+  sales account; the purchase side `vat_recoverable` or the output account
+  (one net account). Never a revenue, expense, bank or header account. The
+  refusal lists the accounts that qualify; ask which one the customer uses.
 
 ### Tax code rate components — `tax_code_rate`
 
@@ -98,7 +104,8 @@ For a `components` code, posting:
   refused at posting);
 - rounds each component half-up and books it as its own tax GL line, recorded
   in `transaction_line_taxes`. `tax_account_number` is an output (sales-side)
-  account; without it the code's sales account is used. Purchase documents
+  account (`vat_payable` or `sales_tax_payable`; another subtype is refused);
+  without it the code's sales account is used. Purchase documents
   book input tax to the code's purchase account. A component account the
   entity does not have refuses the posting;
 - back-solves the combined rate for tax-inclusive prices;

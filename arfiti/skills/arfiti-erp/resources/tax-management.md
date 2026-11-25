@@ -148,6 +148,14 @@ get_entity("tax_code", id=115)
 
 A code needs BOTH sides: with one account, input VAT lands in the output-VAT account, and a default pointed at an input-VAT account "for AP" makes AR credit output VAT there (Hala Digital, 2026-09). AR refuses a code whose sales side resolves to an input-VAT account (`vat_recoverable` subtype) — set `sales_account_number` on the code.
 
+**Which accounts a code may name (AR-1460).** `tax_code.create` / `update` and `tax_code_rate.create` / `update` refuse, at `validate_only` too, an account that is not a tax account, classified by `account_subtype`:
+
+- Sales side (`sales_account_number`, or the default when there is none; a component's `tax_account_number`): `vat_payable` or `sales_tax_payable`. On a reverse-charge code an explicit `sales_account_number` must be `vat_payable`.
+- Purchase side (`purchase_account_number`, or the default): `vat_recoverable`, or the output account itself (one net VAT account is accepted).
+- Never a revenue, expense, bank or generic (`other_current_liability`) account: non-deductible tax goes to the purchase line's own account, never to the code's account. Never a header; active in at least one entity.
+
+The refusal names the field, the account, its subtype and the accounts that would qualify. Ask the customer which of those accounts their chart uses, or set the subtype of their tax account (`account.update`); never pick by number. A code stored before this rule keeps posting as it is configured: renaming or deactivating it is not refused, changing one of its accounts is checked. `get_onboarding` lists, per entity, active codes whose accounts are not tax accounts of that entity's chart (codes are organisation-wide, so another entity's chart may lack them). Codes of type `withholding`, `corporate_income` and `excise` are not checked yet (AR-1490: posting books them as VAT on top). Onboarding and connector imports skip a code the chart cannot carry and list it in `tax_codes_not_created` (`needs_configuration`): create it on the accounts the customer names.
+
 Rates are percentage points: `default_rate: 7.25` is 7.25%. A non-zero rate below 1 that the code's own name or description gives as a larger percentage (a US state code at `0.04` described as 4.0%) was seeded as a fraction: report it to the user instead of posting with it, and do not change it yourself.
 | `is_compound` | boolean | No | Compound tax (tax on tax) | `false` |
 | `is_recoverable` | boolean | No | Can claim input tax credit | `true` |
