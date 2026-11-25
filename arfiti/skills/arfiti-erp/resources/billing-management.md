@@ -1774,6 +1774,18 @@ through
   `{"country": "missing"}`, or `{"countries": [ISO codes]}` with an optional
   `"vat_number": true | false`. An empty match matches every checkout.
 
+The billing organisation can also edit it in the dashboard, Configuration ›
+Platform billing, which shows what the billing entity still lacks (items, revenue
+accounts, tax codes) before payments can be recorded.
+
+**AI credit top-ups and the buyer's tax details (AR-870).** A top-up is invoiced
+to the organisation's Billing › Company details, so it needs a company name and
+a country there first; until then the Top up field is disabled and says what is
+missing. The tax rules are applied to those saved details, not to what a payment
+page collected: an EU business whose VAT number the EU VIES register confirms
+gets the reverse-charge rule; a number VIES does not confirm stops the top-up
+with a sentence (correct it, or remove it to be charged VAT).
+
 Each item's revenue account is the item's own `revenue_account_number`, and the
 tax code is read as the billing entity sees it (`v_tax_codes_effective`). A
 malformed value is refused when saved. A checkout the setting cannot answer is

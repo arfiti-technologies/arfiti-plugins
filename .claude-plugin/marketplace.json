@@ -12,7 +12,7 @@
       "name": "arfiti",
       "source": "./arfiti",
       "description": "The Arfiti finance system inside Claude: the connector, the operating guide to its tools, the procedures Arfiti's own agents follow, financial reports, budgets, cost allocation, migration from another system and country setup.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "category": "accounting",
       "keywords": [
         "erp",
