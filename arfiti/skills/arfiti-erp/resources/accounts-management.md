@@ -269,7 +269,7 @@ submit(object_type="account", operation="update", data=JSON.stringify({
 **Updatable Master Fields**:
 - `account_name` (string, max 255)
 - `description` (text)
-- `account_subtype` (canonical subtype) - reclassifies the account **within its `account_type`** (e.g. an imported card account `other_current_asset` → `bank`; a migrated trade-creditor account `other_current_liability` → `accounts_payable`). A subtype of another type is refused. Reports read all posted history under the new subtype (cash scope, receivable/payable control), so confirm the account's real role first. The response's `account_subtype_change` shows `{from, to}`.
+- `account_subtype` (canonical subtype) - reclassifies the account **within its `account_type`** (e.g. an imported card account `other_current_asset` → `bank`; a migrated trade-creditor account `other_current_liability` → `accounts_payable`). A subtype of another type is refused. Reports read all posted history under the new subtype (cash scope, receivable/payable control), so confirm the account's real role first. The response's `account_subtype_change` shows `{from, to}`. A subtype, type, active-flag or entity-number change that would leave an active tax code on a non-tax account is refused (AR-1491): the refusal names the code, the entity and the account; ask the customer which tax account the code should use and change the code (`tax_code.update`) first.
 - `is_active` (boolean)
 - `allow_manual_entries` (boolean)
 - `is_reconcilable` (boolean)
@@ -309,6 +309,8 @@ submit(object_type="account", operation="update", data=JSON.stringify({
 ### 3. Delete Account (`account.delete`)
 
 **Purpose**: Soft delete (deactivate) or hard delete (remove) accounts
+
+A delete (soft, hard or an entity override's) that would leave an active tax code on an account that is no longer a tax account of an entity's chart is refused (AR-1491), even with `force`: the refusal names the code, the entity and the account. Point the code at another tax account (`tax_code.update`) or deactivate it first, after asking the customer.
 
 **Approval**: Red lane by default for hard delete; soft delete's lane is set by the organisation's workflow configuration. Approval steps are configured per organisation; report the `status` and `lane` from the submit() result.
 
