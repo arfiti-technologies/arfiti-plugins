@@ -1786,6 +1786,17 @@ page collected: an EU business whose VAT number the EU VIES register confirms
 gets the reverse-charge rule; a number VIES does not confirm stops the top-up
 with a sentence (correct it, or remove it to be charged VAT).
 
+**The customer's identifiers on a platform invoice (AR-1504, AR-1510).**
+Billing › Company details holds a VAT ID and, optionally, a registry code (the
+company's number in its business register; only length and characters are
+checked, no country's format). The invoice prints the VAT number as "VAT: …"
+(from the billing customer's tax profile) and the registry code as "Reg. …"
+(the billing customer's `tax_id`), each only when known. Saving Company details
+updates the billing customer's name, contact, address and registry code through
+`customer.update`; the VAT number reaches the tax profile with the next
+purchase. A customer created before 25 Nov 2026 may still show its VAT number
+under "Reg." until it is corrected.
+
 **Before a top-up is confirmed (AR-1484).** The form shows the AI credit the
 buyer receives (USD at the ECB rate of the day, with its date), the euro total,
 the VAT position and the refund terms, worked out by the same tax rule, basis
