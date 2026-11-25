@@ -35,6 +35,8 @@ Opening balances include **only balance sheet accounts** (not revenue or expense
 
 **Why no revenue/expenses?** Because revenue and expenses reset to zero at the start of each year. Last year's net profit/loss gets rolled into Retained Earnings.
 
+**If the figures still hold revenue or expenses** (the prior year was not closed to retained earnings), ask for a closed balance sheet or trial balance first. If the user cannot provide one, do not drop those lines (the balancing account would silently absorb the year's result) and do not date them on 1 January (they would land in the new year's income statement). Propose dating the opening entry on 31 December of the prior year instead, so they fall into the prior year's result: `fiscal_period_name="2025-12", opening_date="2025-12-31"` for books starting 1 January 2026. Say that exact date and get the user's agreement before posting. The December period must exist and be open, and only `opening_balances` takes `opening_date` (the subledger version does not).
+
 ## Preparing the Data
 
 ### Step 1: Extract from Balance Sheet
@@ -90,6 +92,10 @@ manage_imports(
     balancing_account_number="3300"
 )
 ```
+
+**Dated and read back.** The entry is dated the first day of `fiscal_period_name`, which must be a monthly period (here 1 January 2025), unless `opening_date` names another day inside it. Run the call with `validate_only=True` first: the answer states `posting_date`. Tell the user the date and wait for their agreement before posting without `validate_only`, because the date decides which year the balances open.
+
+**One opening entry per period.** A second opening entry for the same entity and period is refused, whether the first is posted or still waiting for approval; the refusal names it and its date. Two entries would double every balance, so this is enforced, also when two submissions wait for approval at once. The check is per period: look for opening entries in every period first (`query("transaction", filters={"legal_entity_id": ENTITY_ID, "transaction_type": "OPENING_ENTRY"})`). To correct a posted entry, reverse it (`submit(object_type="transaction", operation="reverse", ...)`) and upload again; a waiting one is rejected first.
 
 ### The Balancing Account
 
@@ -188,6 +194,8 @@ It is OK to proceed without subledger details. The GL balances will be correct a
 4. **Loan balances**: Split between short-term (due within 12 months → 2000-2099) and long-term (due after 12 months → 2500-2599).
 
 5. **Prepayments**: Annual insurance or rent paid in advance — these are assets (prepaid expenses, account 1300).
+
+6. **Re-importing to fix a mistake**: the second upload is refused while the first opening entry exists. Reverse the first entry, then import again.
 
 ## Verification
 

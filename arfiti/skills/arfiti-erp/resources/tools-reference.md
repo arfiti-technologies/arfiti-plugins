@@ -306,8 +306,11 @@ schema = get_submissions(action='schema', object_type="transaction", operation="
 submit(object_type="transaction", operation="post", data='{"transaction_type_code": "AP_INVOICE", "legal_entity_id": 10, ...}')
 
 // Legal entity creation — goes through onboarding, NOT submit()
-// First entity in a new org:
-manage_onboarding(action="start", country_code="US", accounting_standard="us_gaap_standard", tax_jurisdiction="us_sales_tax")
+// First entity in a new org (pass only what the person answered; start runs nothing):
+manage_onboarding(action="start", country_code="US", accounting_standard="us_gaap_standard", tax_jurisdiction="us_sales_tax", fiscal_year_start_month=1)
+// Show the person read_back, end the turn; after their yes:
+manage_onboarding(action="confirm_choices", confirmation_token="...", person_reply="<their reply>")
+manage_onboarding(action="run_wave")   // refused (choices_not_confirmed) until confirm_choices
 // Second+ entity in an onboarded org:
 manage_onboarding(action="add_entity", entity_name="Acme US", entity_code="ACME-US", country_code="US", base_currency="USD")
 

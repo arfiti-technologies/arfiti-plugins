@@ -23,15 +23,16 @@ membership; a Controller, Viewer, role named Admin, stale owner token, or
 `admin:write`/`config:write` grant alone does not qualify. Agent credentials cannot
 perform these user administration operations.
 
-This applies to `manage_onboarding` actions `start`, `run_wave`, `update_task`,
-`reset`, `add_entity`, `initialize_entity`, and `load_demo_data`, plus template
+This applies to `manage_onboarding` actions `start`, `confirm_choices`, `run_wave`,
+`update_task`, `reset`, `add_entity`, `initialize_entity`, and `load_demo_data`, plus template
 repair and `legal_entity.create` / `legal_entity.rerun_onboarding_task` workflows.
 They can seed shared accounting configuration, workflow/agent definitions and
 credentials, so entity-limited administrators must ask an unrestricted owner or
 admin to perform them. Ordinary entity-scoped accounting workflows are unchanged.
 
-Onboarding status/checklist/summary and support actions retain
-their existing access rules. New organization owners can still run first-time
+Onboarding status/checklist/summary and support actions retain their existing
+access rules: `get_summary` is called through `manage_onboarding` because it can
+mark onboarding completed, but its authority is a read's, so any member may call it. New organization owners can still run first-time
 onboarding before the organization has any entities. Explicit organization IDs
 must match the connected organization; initialization/copy targets must belong
 to it. Omitting `organization_id` in the MCP initialization/demo gateway uses

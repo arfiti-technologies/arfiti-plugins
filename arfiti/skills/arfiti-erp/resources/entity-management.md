@@ -33,14 +33,14 @@ A **legal entity** represents a distinct legal business unit within your organiz
 | `manage_onboarding(action="start", ...)` | Create the FIRST legal entity in an organization (via onboarding wave 1) |
 | `manage_onboarding(action="add_entity", ...)` | Create a 2nd+ legal entity in an already-onboarded organization |
 
-> **NEVER call `submit(object_type="legal_entity", operation="create", ...)`** — that executor does not exist. Legal entities are created by the onboarding flow, not by `submit()`.
+> **Do not create an entity with `submit(object_type="legal_entity", operation="create", ...)`.** The executor exists, but it creates only the entity record with default number series and transaction-type settings: no chart, fiscal periods, tax codes or posting profiles, so nothing can be posted on it. Create entities through the onboarding actions above, which build the whole set up.
 
 ---
 
 ## Creating a Legal Entity
 
 Admin `/entities/create` provides assistant setup instructions; its legacy direct
-creation endpoint rejects writes. Creation happens via the onboarding tool, never via `submit()`. The entity is created atomically with full infrastructure (chart of accounts, fiscal periods, tax codes, payment terms, GL posting profiles, number series, agent emails, agent definitions, and optional VAT registration).
+creation endpoint rejects writes. Creation happens via the onboarding tool, never via `submit()`. The entity is created with its infrastructure (fiscal periods, payment terms, number series, agent emails, agent definitions, and optional VAT registration; with a template chart also the chart of accounts, tax codes and GL posting profiles). A custom chart (`accounting_standard="custom"`) gets no template accounts, tax codes or posting profiles: the person imports their own chart and the profiles and tax codes are created on the accounts they name, so nothing is posted to an account the customer never chose.
 
 ### First entity in a new organization
 

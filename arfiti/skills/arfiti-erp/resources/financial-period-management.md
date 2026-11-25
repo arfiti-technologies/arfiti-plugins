@@ -207,6 +207,8 @@ When a user provides a balance sheet from a prior year (e.g., 31.12.2024), you n
 
 **Rule:** A balance sheet dated 31.12.2024 means opening balances as of 01.01.2025 — post to period **2025-01**.
 
+The entry is dated the period's first day unless `opening_date` names another day in it (`manage_imports(action="opening_balances")` only), and the answer, including the `validate_only` preview, states `posting_date`: read that date back to the person and agree it before posting. The period must be a monthly one. **Exception:** if the balance sheet is not closed (it still holds revenue or expense accounts), ask for a closed one first; if there is none, propose dating the entry on the old year's last day (`fiscal_period_name="2024-12", opening_date="2024-12-31"`) so those lines fall into the prior year's result, and get the person's agreement. One opening entry per entity and period is accepted (posted or waiting for approval); to replace one, reverse it first.
+
 **Check first:**
 ```javascript
 query("fiscal_period", filters={"legal_entity_id": 12}, limit=50)

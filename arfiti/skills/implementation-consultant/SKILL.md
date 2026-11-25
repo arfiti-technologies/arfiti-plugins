@@ -120,7 +120,7 @@ Check if onboarding waves completed the infrastructure:
 manage_onboarding(action="get_summary")
 ```
 
-If pending tasks remain, run waves: `manage_onboarding(action="run_wave")` — repeat until accounting/infrastructure tasks complete.
+If pending tasks remain, run waves: `manage_onboarding(action="run_wave")` — repeat until accounting/infrastructure tasks complete. If `run_wave` answers `choices_not_confirmed`, the person has not yet confirmed the onboarding choices: show them the read-back `start` returned (`get_onboarding(action="check_status")` repeats it as `choices_waiting_confirmation`), wait for their reply, and record it with `manage_onboarding(action="confirm_choices", confirmation_token=..., person_reply="<their words>")` before the next wave. Never confirm on their behalf: the waves build the ledger from those choices, and the record is how a reviewer sees what the person agreed to.
 
 ### Step 4: Create Bank Accounts
 

@@ -128,6 +128,12 @@ Explain: "Opening balances are the starting point — they tell us how much was 
    - Explain: "The balancing account (3300 = Retained Earnings) absorbs any small rounding differences to keep the books balanced."
 7. See **references/opening-balance-guide.md** for common pitfalls and subledger details
 
+**Before uploading, three checks** (they apply to both upload methods):
+
+- **Agree the opening date.** The entry is dated the first day of `fiscal_period_name` (a monthly period, for example `"YYYY-01"`), unless `opening_date` names another day in it. Run the upload with `validate_only=true` first: its answer states `posting_date`. Tell the user "the opening entry will be dated <posting_date>" and wait for their agreement, because the date decides which year the balances open.
+- **One opening entry per period.** A second opening entry for the same entity and period is refused, whether the first is posted or still waiting for approval, and the refusal names it and its date (`existing_opening_entry`). Two would double every balance. The check is per period only, so first look for opening entries in any period: `query("transaction", filters={"legal_entity_id": ENTITY_ID, "transaction_type": "OPENING_ENTRY"})`. To replace one, reverse it first (`submit(object_type="transaction", operation="reverse", ...)`), or have a waiting one rejected; then upload again.
+- **An unclosed prior year.** If the user's figures still hold revenue or expense accounts (the year was not closed to retained earnings), ask for a closed balance sheet or trial balance first. If they cannot provide one, propose dating the entry on 31 December of the prior year (for books starting 1 January 2026: `fiscal_period_name="2025-12", opening_date="2025-12-31"`), so those lines fall into the prior year's result rather than the new year's income statement; say that exact date and get the user's agreement before posting. The prior year's December period must exist and be open. This needs `opening_balances`: `opening_balances_with_subledger` takes no `opening_date`, so with open items ask for the closed figures.
+
 **CP4 checkpoint**: Trial balance from `generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "YYYY-01-01"})` shows total debits = total credits.
 
 ### Step 5b: Detect Subledger Accounts
@@ -170,7 +176,7 @@ manage_imports(
 )
 ```
 
-**When no details provided:** Fall back to the regular `manage_imports(action="opening_balances", ...)` already posted in Step 5. The GL balances will be correct but subledger features (aging, depreciation schedules) will be limited.
+**When no details provided:** use the regular `manage_imports(action="opening_balances", ...)` instead. The GL balances will be correct but subledger features (aging, depreciation schedules) will be limited. Post only one of the two for the period: once one opening entry is posted or waiting, the other is refused. To switch to the subledger version after a regular upload, reverse the regular entry first.
 
 **CP4b checkpoint**: Subledger records verified — individual AR invoices/AP bills created (if details provided), fixed asset register populated (if details provided).
 
@@ -407,7 +413,8 @@ Common issues and how to resolve them:
 | "Period is closed" | Trying to post to an already-closed period | Reopen the period, post, then re-close |
 | "Debits don't equal credits" | Unbalanced journal entry | Check the entry — every debit must have an equal credit |
 | "Duplicate transaction" | Same transaction posted twice | Check transaction list, delete the duplicate |
-| Opening balance doesn't match | Mapping error during import | Review account mapping, correct and re-import |
+| Opening balance doesn't match | Mapping error during import | Review account mapping; reverse the posted opening entry (a second one for the same period is refused), then re-import |
+| "Opening balances already posted" / "already waiting for approval" | One opening entry per entity and period | Reverse the posted entry, or have the waiting one approved or rejected, then upload again |
 
 ## Output Format
 

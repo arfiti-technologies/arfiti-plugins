@@ -1260,13 +1260,16 @@ query(
 )
 ```
 
-**Monthly revenue trend:**
+**Monthly revenue trend:** filter on status for the same reason: a reversed
+invoice keeps its stored amount with `status` `reversed` (its reversal is a
+separate `REVERSAL` document, so the type filter already leaves that out).
 ```javascript
 query(
   entity_type="transaction",
   group_by=["party_name"],
   aggregates={"amount": "sum"},
-  filters={"legal_entity_id": 10, "transaction_type": "AR_INVOICE"},
+  filters={"legal_entity_id": 10, "transaction_type": "AR_INVOICE",
+           "status": ["posted", "partial", "partially_paid", "paid", "reconciled"]},
   date_filters={"transaction_date": {"from": "2025-01-01", "to": "2025-12-31"}},
   time_bucket={"field": "transaction_date", "interval": "month"},
   sort_by="period"
@@ -1359,7 +1362,7 @@ generate_report("ap_aging", {
 
 **Pattern 2: Analytics → Drill Down → Details**
 ```
-1. query("bill", group_by=["vendor_name"], aggregates={"amount": "sum"}) → summary
+1. query("bill", filters={"status": ["posted", "partial", "partially_paid", "paid", "reconciled"]}, group_by=["vendor_name"], aggregates={"amount": "sum"}) → summary (the status list leaves out drafts and reversed bills, which keep their stored amounts)
 2. query("bill", filters={"vendor_id": 123}, include_lines=true) → vendor's bills
 3. get_entity("bill", id=456) → single bill with GL lines and dimensions
 ```
