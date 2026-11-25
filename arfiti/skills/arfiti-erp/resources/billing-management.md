@@ -616,7 +616,7 @@ Reversal-and-rebill is supported: once the original transaction is reversed (sta
 
 ### Cancelling a Billing Run
 
-`billing_run.cancel` automates reverse-and-rebill. For the given run it reverses every posted invoice, rolls each affected contract's `next_billing_date` back to that run's `period_start` (and clears `last_billed_date`), and marks the run cancelled. A later `billing_run.execute` then re-bills the same period with convention-correct dates (see `billing_timing`).
+`billing_run.cancel` automates reverse-and-rebill. For the given run it reverses every posted invoice, rolls each affected contract's `next_billing_date` back to that run's `period_start`, resets `last_billed_date` to the billing date of the latest receipt that still stands (null when none; AR-1336 — it holds the run's billing date, not the invoice date), and marks the run cancelled. A standalone reversal of a billing-run invoice does the same for its contract. A later `billing_run.execute` then re-bills the same period with convention-correct dates (see `billing_timing`).
 
 ```python
 submit(object_type="billing_run", operation="cancel", data=json.dumps({
@@ -1247,7 +1247,7 @@ submit(object_type="billing_run", operation="execute", data=JSON.stringify({
 | `recurring_contract.update` | `contract_id` |
 | `recurring_contract.activate` | `contract_id` |
 | `recurring_contract.suspend` | `contract_id`, `suspension_reason` |
-| `recurring_contract.terminate` | `contract_id`, `termination_date` |
+| `recurring_contract.terminate` | `contract_id`, `termination_date` (optional `reason`) |
 | `recurring_contract.amend` | `contract_id`, `amendment_type`, `effective_date` |
 | `recurring_contract.renew` | `contract_id` |
 
@@ -1470,6 +1470,14 @@ to the operator receipt procedure, never a generic task response or model decisi
   and `reason` aliases normalize to it. Conflicting non-empty values are rejected.
   The saved metadata and response retain the existing `suspend_reason` key.
   Organization-required-field policy still applies.
+- `recurring_contract.suspend` accepts an optional, informational `resume_date`
+  (alias `suspend_until`), validated as a calendar date and stored as
+  `metadata.planned_resume_date`. It never reactivates the contract;
+  `recurring_contract.activate` does (AR-1297).
+- `recurring_contract.terminate` persists the canonical `reason` as
+  `metadata.termination_reason`; legacy `termination_reason` is accepted and a
+  conflicting pair is refused (AR-1334). Before this fix a `reason` supplied on
+  terminate was discarded; those contracts keep a null reason.
 
 These fixes do not retroactively infer discarded values for existing contracts.
 Review the original workflow payload before repairing a historical record; do not

@@ -2418,6 +2418,18 @@ service reuses the strict native cancellation/card proof used by account transit
 It does not match by memo, amount alone, company identity or a caller's system flag.
 Existing reviewed-settlement undo cannot use the generic canceled-journal path.
 
+**Columns added after a review (AR-1391, migration 931).** Control receipts
+store whole rows, so validity compares the fields each receipt recorded
+(`system.historical_evidence_holds`): every recorded value, jsonb values whole,
+must be unchanged; a key the receipt never recorded is accepted only at row
+level (a document header or a row of lines, dimensions, links, application
+history or reversals) and only while it is null. A migration that adds a
+nullable column therefore leaves receipts valid; a column added with a value on
+the covered documents, or a later write that sets it, invalidates the receipt
+and the source guard refuses the change. Settlement receipts apply the same rule
+to their `competing_links` rows, the only whole-row part of their snapshot.
+Receipts are not re-recorded; nothing else in the guards changed.
+
 Use `scripts/review_historical_control_permissions.py prepare --org <organization>
 --entity <entity> --selections <private.json> --as-of <date> --output <private.json>`.
 Each selection contains `journal_id`, `control_account_id`, and `kind`;
