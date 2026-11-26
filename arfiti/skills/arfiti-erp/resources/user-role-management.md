@@ -756,8 +756,13 @@ pending submission instead of claiming it was applied.
   Owners cannot be removed. Only an owner can grant/change owner membership, and
   the last owner cannot be demoted. Changes serialize per organization.
   These rules are checked before submission as well: a refusal comes back as a
-  pre-submission `Validation Failed` with the sentence in `errors` (for example
-  "The last owner cannot be demoted"), and nothing is changed. The refusal is
+  pre-submission `Validation Failed` with the sentence in `errors`, and nothing
+  is changed. When an owner asks to remove or demote the organisation's only
+  active owner, every route gives the same sentence (AR-304): "The last owner
+  cannot be removed or demoted. Make another member an owner first, then change
+  this member's role." An admin asking to remove or demote any owner is refused
+  first, with "Only an owner can change owner membership". An owner membership
+  on a deactivated user does not count as a second owner. The refusal is
   stored under the request's idempotency key: once the cause is fixed, resubmit
   with a new `idempotency_key`. The rules are checked against the organisation
   as it is at submission, also for a change that waits for approval: to hand
