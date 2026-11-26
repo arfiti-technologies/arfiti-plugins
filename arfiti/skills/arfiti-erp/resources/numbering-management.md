@@ -13,7 +13,7 @@ The numbering system automatically generates unique, sequential identifiers for 
 
 **Architecture**: Transaction counters live in `transaction_type_settings`; master data uses `number_series`.
 
-Transaction numbers share one namespace per organization/entity, across transaction types. The allocator holds an entity-level transaction advisory lock, increments the configured type counter and skips numbers already present in `transactions`, including reversed records. Configured prefixes are preserved: if AP payment already uses PAY000001, payroll with the same prefix gets the next unused number. Use distinct prefixes for easier reading; counters need not be contiguous within one type when prefixes overlap. The insert and allocation must use the same database transaction; failure rolls back the counter advances. The database unique constraint remains the final guard for manual or external writers.
+Transaction numbers share one namespace per organization/entity, across transaction types. The allocator holds an entity-level transaction advisory lock, increments the configured type counter and skips numbers already present in `transactions`, including reversed records. Configured prefixes are preserved: if AP payment already uses PAY000001, payroll with the same prefix gets the next unused number. Use distinct prefixes for easier reading; counters need not be contiguous within one type when prefixes overlap. Customer-facing series (`AR_INVOICE`, `AR_CREDIT_MEMO`, `AR_DEBIT_MEMO`) are gapless, so no other transaction type may share their prefix (see the rules under Configuring Transaction Type Settings). The insert and allocation must use the same database transaction; failure rolls back the counter advances. The database unique constraint remains the final guard for manual or external writers.
 
 
 
@@ -104,6 +104,8 @@ Rules:
 - The `transaction_type_code` must already exist in the platform catalog (`system.transaction_types`). Adding a genuinely **new** transaction type is a platform code change — you cannot create one from here; ask the platform team.
 - `next_number` is **not** editable through this path. Rewinding the counter would issue duplicate document numbers; the counter only moves forward via number allocation.
 - Use `query` on `transaction_type_settings` to find the `transaction_type_setting_id` for an update.
+- A type that is not customer-facing may not take the prefix of an AR invoice, AR credit memo or AR debit memo series on the same entity, and an AR series may not take an internal type's prefix: each number the other type took would be a hole in the customer's gapless sequence. The save is refused with a message naming the series it collides with. Prefixes are compared ignoring case and surrounding spaces, and a prefix followed only by digits (`INV2` against `INV`) counts as the same. Customer-facing series may share a prefix with each other (invoices and credit memos numbered together), and internal series with each other.
+- A setting that already shared such a prefix before this rule is not changed. Saving it without changing its prefix succeeds and the result carries a `warnings` entry `customer_facing_prefix_shared`; tell the user and suggest giving the internal type a prefix of its own. Do not change the prefix yourself unless the user asks.
 
 ---
 
