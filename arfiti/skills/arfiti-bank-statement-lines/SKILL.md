@@ -263,7 +263,8 @@ For `AP_PAYMENT` / `AR_PAYMENT` find the party by IBAN
 `customer`). Exactly one match: use it. None: a client rule decides whether
 a party may be created from a bank line (for example "ask before creating a
 customer"); then ask. With no rule, delegate to the master-data agent with the
-name, IBAN, BIC, reference, amount, line id and legal entity, and use the id it
+name, IBAN, BIC, reference, amount, line id and legal entity (for a card line,
+the merchant country as the card reported it), and use the id it
 returns (`awaiting_approval`: declare the wait for its `workflow_id`, "A
 decision comes back to this session", and the line waits; `failed`: the line
 waits and is reported).
@@ -276,13 +277,48 @@ Several: a question. An employee match: a question, never a vendor.
 
 **A vendor that cannot be created for lack of details.** When the master-data
 result is `failed` with `forced_fields`, the organisation's vendor workflow
-requires details that the document and the records do not hold. Raise one
-`question` task (`title`: "Supplier details needed") that names the supplier
-and lists each missing detail in plain words ("website", "tax number",
-"payment terms"), with the document attached. Say that the person can give
-the details, or the organisation can make those fields optional in its
-vendor workflow. Never fill a missing detail yourself. The item waits; when
-the answer arrives, hand the details to the master-data agent and continue.
+requires details that the document and the records do not hold (the shipped
+workflow requires a `country`; an organisation may require more). Read which
+from `forced_fields` or the refusal's `missing_fields`, never from words in
+its message. Raise one `question` task (`title`: "Supplier details needed")
+that names the supplier and lists each missing detail in plain words
+("country", "website", "tax number"), with the supplier as the subject
+(below). What the line itself suggests goes in the question as a proposal
+with its source, never as a value you send: a card's merchant country ("the
+card network reports this merchant in DE"), the country prefix of the
+counterparty's IBAN. Neither is the supplier's country by itself (a
+marketplace, an EU branch of a US company). Say that the person can give the
+details, or the organisation can make those fields optional in its vendor
+workflow. Never fill a missing detail yourself.
+
+One question per supplier: its `subject` is the supplier, not the line,
+`{"type": "supplier", "id": "<supplier key>", "label": "<supplier name>"}`.
+The supplier key is the counterparty's IBAN when the line has one, in
+capitals without spaces; otherwise the name you would give the vendor (a card
+descriptor without its reference: "AMZN Mktp DE*2X4" is "Amazon"), in lower
+case with only letters and digits ("ACME GmbH" gives `acmegmbh`). If that
+leaves nothing, the line is the subject. Name the line itself in `details`.
+Send it with this line's own key, `idempotency_key="bank-X-L-task-supplier"`
+(`bank-X-card-C-task-supplier` for a card charge), never a shared one; the
+server does not deduplicate a task create by key, only by subject. A supplier seen once by
+IBAN and once by name can still get two questions; that is the limit of
+this key.
+One exception: in a run for one card charge's receipt (the kickoff opens
+with "A receipt was submitted for one card charge"), the subject is the charge,
+`{"type": "card_transaction", "id": C}`. The platform keeps the receipt
+on the charge only while a task about that charge, or one this session
+raised, is open; a receipt run that only attached to another session's
+supplier question would have its receipt given back.
+The server keeps one open task per entity, kind and subject, so when a
+"Supplier details needed" task for the same supplier is already open, from
+this session or an earlier one, the create answers `already_open: true` with
+that task's `request_id` and raises nothing new. Either way the line waits
+for that answer: report it under `gaps` with the `request_id`, and while the
+task is open do not hand the same supplier to the master-data agent again or
+resubmit the create. When the answer arrives, hand the details to the
+master-data agent, then look up the entity's unmatched lines for that
+supplier (`query("bank_statement_line", ...)`, `query("card_transaction", ...)`)
+and continue each one, including lines another session left waiting.
 
 
 ## Step 5: post, then match
@@ -620,7 +656,7 @@ submit(object_type="agent_request", operation="create", data=JSON.stringify({
     "question": "<10 to 2,000 characters: the one decision needed>",      // not on system_refusal
     "title": "<what you need from the person, 3 to 80 characters, one line, e.g. Need expense account, Review bank line, Choose the matching bill>",
     "details": "<up to 4,000 characters: what you checked and what you concluded>",
-    "subject": {"type": "bank_statement_line | card_transaction", "id": <id>, "label": "<number or name, up to 200 characters>"},
+    "subject": {"type": "bank_statement_line | card_transaction | supplier", "id": <id>, "label": "<number or name, up to 200 characters>"},  // supplier: see "A vendor that cannot be created for lack of details"
     "options": [{"id": "<lower_case_id>", "label": "<choice>", "note": "<what you will do>"}],  // up to 8; not on system_refusal
     "documents": [{"filename": "...", "storage_url": "...", "content_type": "..."}],         // up to 10
     "refusal": {"operation": "<object.operation>", "reason": "<message or failure_reason>", "workflow_id": "<id>"},  // system_refusal only

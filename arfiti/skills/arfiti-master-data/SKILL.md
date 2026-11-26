@@ -238,7 +238,15 @@ create a vendor; the register check is about identity.
    (no "TBD", no 0, no made-up URL). `validate_only` first; if it refuses for
    such a field, return `failed` with `reason: required field <name> not in
    the brief or records` and list the fields under `forced_fields`, so the
-   caller asks a person or the organisation relaxes its workflow.
+   caller asks a person or the organisation relaxes its workflow. Take the
+   fields from the refusal's `missing_fields`, not from words in its message
+   (the message also carries reference lists).
+   `country` is sent only as the document, the register or the records show
+   it. A card's merchant country or an IBAN's country prefix in the brief is
+   evidence, not the supplier's country (a marketplace, an EU branch of a US
+   company bills from elsewhere): without a confirming source, leave
+   `country` out, list it under `forced_fields`, and repeat the evidence and
+   its source under `needs_review` so the caller can propose it to a person.
 5. `submit(object_type="vendor", operation="create", data=payload, validate_only=true)`, fix what it
    names from the brief and the records (only from them), then submit for
    real with the idempotency key.
