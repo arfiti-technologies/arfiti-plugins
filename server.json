@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.arfiti-technologies/arfiti",
+  "title": "Arfiti Finance system for agents and teams",
+  "description": "Finance system for agents and teams: ledger, invoices, bills, payroll, reports and approvals.",
+  "websiteUrl": "https://arfiti.com/docs/getting-started",
+  "version": "1.0.1",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.arfiti.com/streamable/mcp"
+    }
+  ]
+}
