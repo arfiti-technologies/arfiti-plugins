@@ -138,6 +138,9 @@ When a material variance is found, investigate in layers:
 generate_report("variance_summary", {
     "budget_version_id": <id>   # the version fixes the entity; legal_entity_id is not a parameter here
 })
+# largest_variances: the 10 accounts with the largest absolute variance (`limit` for more, max 100).
+# Every account: generate_report("variance_by_account", {"budget_version_id": <id>}), 50 per page;
+# pass next_cursor back as `cursor` until has_more is false.
 ```
 
 ### Level 2: Period Trend

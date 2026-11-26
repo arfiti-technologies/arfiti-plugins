@@ -57,6 +57,11 @@ Lanes are assigned by your organisation's workflow rules; the submit() result is
 
 **Total:** 25 workflow operations
 
+**Status lifecycle:** `draft → submitted → approved → locked → archived`. `reject`
+returns a submitted version to `draft`; `reopen` returns a submitted or archived
+version to `draft`. Lines can be added or changed only while the version is
+`draft`. The transitions are under Budget Status Lifecycle below.
+
 > **IMPORTANT — Schema Discovery Required**: Before calling `submit()` for any workflow below, you MUST first call `get_submissions(action='schema', object_type, operation)` to discover the exact required and optional fields. Each organization configures different field requirements. Never assume the fields listed below are complete — always check the schema first.
 
 ## Available Query Tools
@@ -70,7 +75,10 @@ Lanes are assigned by your organisation's workflow rules; the submit() result is
 | `get_entity("budget_line", id=X)` | Get single budget line (includes `account_number_display`, `period_name` inline) |
 | `query("budget_line", filters)` | List lines with filters |
 | `query("budget_line", query, filters)` | Search budget lines |
-| `generate_report("variance_summary", ...)` | Calculate budget vs actual variance |
+| `generate_report("variance_summary", {"budget_version_id": X})` | Headline budget vs actual: totals, the version's line count and the largest variances (`limit`, default 10) |
+| `generate_report("variance_by_account", {"budget_version_id": X})` | Every account's variance, 50 per page (`limit`, `cursor` = the previous `next_cursor`) |
+| `generate_report("variance_by_period", {"budget_version_id": X})` | Net variance per period, paged the same way |
+| `generate_report("budget_actual", {"legal_entity_id": E, "budget_version_id": X, "report_contract": 1, "limit": 50})` | Every budget-vs-actual row with its scope; `next_cursor` continues |
 | `query("budget_line", group_by, aggregates, filters)` | Aggregate budget lines (e.g., total by account, by period) |
 | `query(entity_type, filters={...})` ×N | Fetch reference data (issue the calls in parallel) (accounts, periods, dimensions) |
 

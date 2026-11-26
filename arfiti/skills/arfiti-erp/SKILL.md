@@ -29,7 +29,7 @@ Arfiti exposes 24 tools. Read-only tools never change anything; write tools ask 
 | `query` | read | Lists, text search, counts and ad-hoc totals over any entity type (`filters`, `date_filters`, `group_by`/`aggregates`). Use it when you do not have an ID. | — |
 | `get_entity` | read | One record (or up to 100 with `ids`) with its related data, by ID or `global_id`. Use it once you have the ID from `query`. | — |
 | `generate_report` | read | Formal statements and reports (trial balance, P&L, aging, VAT, …). `generate_report("list")` lists them with their required params. | — |
-| `get_guidance` | read | Server-side guide for a domain (`topic`), always current. | — |
+| `get_guidance` | read | Server-side guide for a domain (`topic`), always current, in pages of at most 20,000 characters (`page`, from 1; page 1 lists them). | — |
 | `convert_currency` | read | Convert an amount at the stored rate on a date. | — |
 | `get_effective_item_price` | read | An item's price for an entity, customer, quantity and date. | — |
 | `read_attachment` | read | Extract text, amounts, metadata and visual evidence (logos, issuing platform, stamps) from a stored file or a `connector://` file (`storage_url`, `content_type`; PDFs up to 200 pages, optional `pages`). | — |

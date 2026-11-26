@@ -393,11 +393,16 @@ Budget variance analysis. Uses `budget_version_id` instead of entity/date parame
 
 | Report Type | Description | Required Params |
 |-------------|-------------|-----------------|
-| `variance_summary` | High-level budget vs actual | `budget_version_id` |
-| `variance_by_account` | Account-level variance | `budget_version_id` |
-| `variance_by_period` | Variance trend by period | `budget_version_id` |
+| `variance_summary` | Totals and the largest account variances | `budget_version_id` |
+| `variance_by_account` | Every account's variance, paged | `budget_version_id` |
+| `variance_by_period` | Net variance per period, paged | `budget_version_id` |
 
-**Optional:** `variance_by_account` accepts `account_type`.
+**Optional:** `variance_summary` accepts `limit`; `variance_by_account` accepts `account_type`, `limit` and `cursor`; `variance_by_period` accepts `limit` and `cursor`. All three accept `as_of_date`.
+
+**Bounded answers (AR-1477).** None of the three returns every report row:
+- `variance_summary` returns the budget, actual and variance totals over the whole version, `budget.line_count` (the version's budget lines, not report rows), `unfavorable_count`, `largest_variances` (the `limit` accounts with the largest absolute variance over elapsed periods; default 10, at most 100; ranking only, no materiality judgement), `largest_variances_scope` (how many accounts had a variance), `report_rows` (how many account-and-period rows the comparison has), `quality` (status and evidence gaps) and `detail`, the exact calls for every account, period and row (carrying the summary's effective as-of date, so their figures agree with it). A 156-line budget whose actuals touch 59 accounts answers in about 4,000 characters (it was 530,000).
+- `variance_by_account` (ordered by account number) and `variance_by_period` (ordered by period) return at most `limit` rows per page (default 50, sized to fit one chat result; at most 500 for a caller that can take more) with `account_count` / `period_count` for all rows, `returned_count`, `truncated`, `has_more` and `next_cursor`. Pass `next_cursor` back as `cursor` for the next page; it carries the first page's effective as-of date, so later pages read the same cutoff even when an actual is posted in between (a cursor for a different `as_of_date` is refused). A bad `limit` or `cursor` is refused (`REPORT_INVALID_LIMIT`, `REPORT_INVALID_CURSOR`) and nothing is run.
+- Every row with its stored scope: `budget_actual` with `report_contract: 1`, paged with `limit` and `cursor`.
 
 **`budget_actual` subtotals (exact contract).** Use the server's subtotals; never add rows:
 - `totals.revenue` / `totals.cost` / `totals.net` cover the completed (elapsed) periods.
@@ -410,15 +415,20 @@ Budget variance analysis. Uses `budget_version_id` instead of entity/date parame
 **Examples:**
 
 ```
-# Budget Variance Summary
+# Budget Variance Summary (totals and the 10 largest account variances)
 generate_report("variance_summary", {
     "budget_version_id": 5
 })
 
-# Variance by Account (expenses only)
+# Variance by Account (expenses only), then the next page
 generate_report("variance_by_account", {
     "budget_version_id": 5,
     "account_type": "expense"
+})
+generate_report("variance_by_account", {
+    "budget_version_id": 5,
+    "account_type": "expense",
+    "cursor": "50@2026-10-31"   # the previous page's next_cursor, as returned
 })
 
 # Variance Trend by Period
