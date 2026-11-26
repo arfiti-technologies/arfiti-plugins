@@ -1007,14 +1007,15 @@ submit(object_type="customer", operation="update", data=JSON.stringify({
 }))
 ```
 
-**Invoice Behavior:**
-```javascript
-// When invoice created:
-// 1. System checks: customer.reverse_charge_eligible == true
-// 2. System checks: tax_code.is_reverse_charge == true
-// 3. System applies: tax_amount = 0 on invoice
-// 4. System notes: "Reverse charge applies - VAT self-assessment by customer"
-```
+**Which side uses the code:** a code with `is_reverse_charge: true` is the **buyer's** code:
+use it on AP invoices (and purchase-side journal lines), where it posts the input and the
+self-assessed output VAT. It is **refused on every AR document** (AR invoice, AR credit memo,
+AR line in `transaction.update`) whatever its rate, 0 % included: "Line N: Line tax code 'X'
+is a reverse-charge code on an AR document. Reverse charge applies to purchases only". The
+seller invoices a reverse-charge supply with the zero-rate or exempt **sales** code the
+company's tax configuration provides (ask the user which one when it is not clear), with the
+customer-liability wording on the invoice. `reverse_charge_eligible` on the customer's tax
+profile records the customer's status; it does not change which code an AR line may carry.
 
 ---
 
@@ -1350,15 +1351,17 @@ LIMIT 1;
 
 **Implementation:**
 ```javascript
-// Step 1: Create reverse charge tax code
+// Step 1: The seller's code is a zero-rate SALES code, not a reverse-charge code.
+// is_reverse_charge: true is the buyer's code; AR documents refuse it (AR-1499).
+// Use the code the company's tax configuration already has for this supply;
+// create one only if the user confirms it is missing (name and scope are theirs).
 submit(object_type="tax_code", operation="create", data=JSON.stringify({
-    tax_code: "VAT-EU-RC",
-    tax_name: "EU Reverse Charge VAT",
+    tax_code: "VAT-EU-B2B-SERVICES",
+    tax_name: "EU B2B services, customer accounts for VAT",
     tax_type: "vat",
     tax_scope: "services",
-    default_rate: 20,
-    is_reverse_charge: true,
-    is_recoverable: true,
+    default_rate: 0,
+    is_reverse_charge: false,
     default_tax_account_number: "2220",
     is_active: true
 }))
@@ -1626,7 +1629,7 @@ Use consistent naming pattern: `{TYPE}-{COUNTRY}-{STATE}-{ADDITIONAL}`
 - `VAT-EU-IE` - Ireland VAT
 - `GST-PST-BC` - British Columbia GST+PST
 - `USE-US-CA` - California use tax
-- `VAT-EU-RC` - EU reverse charge VAT
+- `VAT-EU-RC` - EU reverse charge VAT (purchases only)
 
 ### Tax Rate Date Ranges
 
@@ -1777,10 +1780,12 @@ code says otherwise.
 
 ### Reverse Charge VAT
 
-Set up both tax code and customer profile:
+A reverse-charge code (`is_reverse_charge: true`) is the buyer's code, for purchases; AR
+documents refuse it whatever its rate (AR-1499). The seller invoices with the zero-rate
+sales code its tax configuration provides, and records the customer's VAT number:
 
 ```javascript
-// Tax code with reverse charge flag
+// Buyer side: tax code with reverse charge flag, used on AP invoices
 submit(object_type="tax_code", operation="create", data=JSON.stringify({
     tax_code: "VAT-EU-RC",
     is_reverse_charge: true,
