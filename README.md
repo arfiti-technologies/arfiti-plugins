@@ -1,5 +1,7 @@
 # Arfiti Plugins
 
+[![Arfiti MCP connector](https://glama.ai/mcp/connectors/io.github.arfiti-technologies/arfiti/badges/score.svg)](https://glama.ai/mcp/connectors/io.github.arfiti-technologies/arfiti)
+
 AI-powered plugins that give finance and accounting teams superpowers inside Claude, Cursor, and other AI tools. Each plugin packages domain knowledge — reporting formats, tax rules, compliance workflows — so your AI assistant handles the details correctly.
 
 ## Available Plugins
