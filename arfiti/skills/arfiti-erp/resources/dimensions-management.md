@@ -1732,11 +1732,11 @@ Base-template refresh preserves customized active files and creates pending cand
 
 Default sources are set through Claude, not in the admin dashboard: the workflow pages show which dimension types a transaction type requires but have no editor for default sources. Use `manage_workflow` on Transaction Posting (`get` for the revision, then `draft` or `update`) with `changes.related_rules` = `{"transaction_type_code": "AP_INVOICE", "rules": {}, "dimension_policy": {"version": 1, "dimensions": [{"type_code": "department", "default_sources": ["employee", "vendor"]}]}}`, or set an entity override's `override_config.dimension_policy` for one legal entity. Vendor, Customer, Employee and Account are the sources; they are consulted in the listed order. A change applies only to the named transaction type. Dashboard saves keep the stored policy as it is.
 
-An empty source list enables no defaults. Explicit values take precedence. Employee defaults for card purchases and linked receipts use the verified cardholder context; they do not extract dimension codes from business-purpose prose. Configure AP_INVOICE and CARD_EXPENSE separately when both should inherit employee defaults. A project classification must be explicitly supplied unless it exists in an eligible configured source.
+An empty source list enables no defaults. Explicit values take precedence. When no employee is supplied, employee defaults for a card purchase (a transaction that carries its card charge's `card_transaction_id`) use the cardholder of that charge; they do not extract dimension codes from business-purpose prose. Configure AP_INVOICE and CARD_EXPENSE separately when both should inherit employee defaults. A project classification must be explicitly supplied unless it exists in an eligible configured source.
 
 A policy change through `manage_workflow` replaces the dimension policy you send; read it with `get_workflow(action="get")` first and send it back with only the source order changed, so required header/line rules, inheritance and override restrictions stay as they were. Other related-entity rules are unchanged. It does not automatically enable defaults for existing tenants or rewrite posted records. Approved snapshots remain frozen; changes to policy can require pending submissions to be reviewed again.
 
-Release verification: editor tests and type checking passed locally; production deployment and fresh card receipt verification are pending.
+If the cardholder has no employee record in the entity valid on the transaction date, or has more than one, the employee default fails with that reason instead of guessing.
 
 
 Supplied record dimension commands are validated during a workflow dry run even

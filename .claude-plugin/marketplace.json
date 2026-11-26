@@ -12,7 +12,7 @@
       "name": "arfiti",
       "source": "./arfiti",
       "description": "The Arfiti finance system inside Claude: the connector, the operating guide to its tools, the procedures Arfiti's own agents follow, financial reports, budgets, cost allocation, migration from another system and country setup.",
-      "version": "1.0.20",
+      "version": "1.0.21",
       "category": "accounting",
       "keywords": [
         "erp",
@@ -31,7 +31,7 @@
       "name": "arfiti-ee",
       "source": "./arfiti-ee",
       "description": "Estonia country pack: VAT return (KMD) and EC Sales List, payroll and TSD, annual report with XBRL, and year-end bookkeeping.",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "category": "compliance",
       "keywords": [
         "estonia",

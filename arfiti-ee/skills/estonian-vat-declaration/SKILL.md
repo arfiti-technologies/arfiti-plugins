@@ -914,7 +914,7 @@ Present the final output as a structured document with clear sections:
 - Filing instructions and deadline reminder
 
 
-## Period-close statement evidence (b1, awaiting deployment)
+## Period-close statement evidence
 
 A retained authority account statement is distinct from a return liability. For close evidence, current return statuses are filed, amended, accepted and paid. Draft/superseded/rejected rows are listed but not compared when a current statement exists. Unknown statuses remain not_determined; a differing retained statement still produces a named conflict. If no current return carries a statement, the previous non-cancelled-return fallback remains, labelled “not a current filed return”. Equal statements do not conflict; compare GL only on eligible ledger lines.
 

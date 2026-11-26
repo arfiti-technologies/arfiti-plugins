@@ -230,6 +230,6 @@ Tax returns are viewable at `/tax/returns`:
 - **Form checks and Export (KMD only)**: Form checks lists the KMD check's errors and warnings; Export's **Generate XML** creates the KMD files (CSV and XML) from the stored data for download and sends nothing to the tax authority. It is off while the checks list errors. Other return types have neither tab
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence: authority statements and returns
 
 A retained authority account statement is distinct from a return liability. For close evidence, current return statuses are filed, amended, accepted and paid. Draft/superseded/rejected rows are listed but not compared when a current statement exists. Unknown statuses remain not_determined; a differing retained statement still produces a named conflict. If no current return carries a statement, the previous non-cancelled-return fallback remains, labelled “not a current filed return”. Equal statements do not conflict; compare GL only on eligible ledger lines.

@@ -1572,9 +1572,7 @@ Connector export keeps customer/vendor credits as credit documents. Application 
 
 Customer-credit preflight must resolve the original invoice before validating its
 AR control account and historical tax registration. Validation uses that original
-only for the current request and performs no posting. A follow-up to PR #224 fixes
-the live gateway failure found during QA; deployment and live credit retest remain
-tracked in PLAN_USER_WORKFLOWS_AND_PERMISSIONS.
+only for the current request and performs no posting.
 
 ### Receipt project attribution
 

@@ -1399,7 +1399,7 @@ no business writes. Concurrent billing locks each contract and commits the invoi
 usage consumption, period advance and billing receipt together. Invoice-created
 events address Invoice Delivery only; billing does not automatically charge a card.
 Migration 611 enables usage-recording workflow definitions, preserving existing
-organization definitions and approval settings. Deployment remains separate.
+organization definitions and approval settings.
 
 
 ### Invoice Delivery pipeline and uncertain sends (2026-09-23)

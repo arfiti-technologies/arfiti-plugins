@@ -458,6 +458,6 @@ the policy. Existing clients use a separately reviewed transition. This
 changes permissions, not balances, report decisions or aging membership.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence: which filings are expected
 
 Close filing candidates come from an entity’s country or a registration linked to the form’s authority whose dates overlap the period. A current inactive flag with a recorded end date is evaluated historically; inactive without an end date is uncertain. Missing country/registration or missing applicability configuration is “not determined”, never proof that no return is required.

@@ -834,13 +834,12 @@ completed request. The recognizer reads that stored response and checks eligible
 lines again. Declined, held or no-change outcomes require the review-task path;
 the request being completed does not by itself authorize posting.
 
-The 2026-09-23 platform release runs recognition through prepare/recognize/remediate/
-finalize pipeline stages. Reviewed retries use the stored schedules and actor;
+Recognition runs through prepare/recognize/remediate/finalize pipeline
+stages. Reviewed retries use the stored schedules and actor;
 permissions and response version are checked again at journal posting. An approval
 workflow can remain pending: that is a waiting outcome, not completed recognition.
 The same durable task attempt resumes it without rotating the posting identity.
-An agent preview performs no financial or task writes. Production deployment was
-verified in PR #134; evidence is retained in the completed platform migration record.
+An agent preview performs no financial or task writes.
 
 
 ### Billing usage task execution (2026-09-23 release)
@@ -854,7 +853,7 @@ no business writes. Concurrent billing locks each contract and commits the invoi
 usage consumption, period advance and billing receipt together. Invoice-created
 events address Invoice Delivery only; billing does not automatically charge a card.
 Migration 611 enables usage-recording workflow definitions, preserving existing
-organization definitions and approval settings. Deployment remains separate.
+organization definitions and approval settings.
 
 ## Resume and recognition authority
 

@@ -1021,7 +1021,7 @@ leaves every later reconciliation run, so give a reason a reviewer can check.
 For retained application receipts, configured write-off permissions, dated undo,
 owned runs and cancellation, call `get_guidance("reconciliation-evidence")`.
 The detailed [evidence and recovery reference](reconciliation-evidence.md) retains
-these contracts and their local/deployment qualifications.
+these contracts.
 
 
 ### Manual bank statement finalization — evidence gate (AR-476)
@@ -1036,9 +1036,8 @@ the exclusions and finalization. Successful finalization stores the evaluated
 controls in statement metadata. This does not create ledger entries or alter
 period-close policy. No built-in agent or saga is required.
 
-This gate does not establish completion of AR-476's separate pending-review,
-legacy-writer and deployment-readiness acceptance work. Statement finalization
-is not a period lock or permission to bypass review and approval controls.
+Statement finalization is not a period lock or permission to bypass review and
+approval controls.
 
 A manual finalizer rechecks statement status under its lock. If another writer
 already finalized it, the later attempt refuses and preserves the committed
@@ -1082,5 +1081,5 @@ returns the saved repair/audit receipt without another write. Pending requests,
 older failures without rollback proof, and cancellations without proof remain
 held; never bypass uncertain outcomes using a new key. Missing workflow or completed review evidence
 refuses execution. Do not use ordinary transaction update, direct SQL or re-posting
-as a substitute. Deployment of this capability must be verified before use. A preview does not establish that a
+as a substitute. A preview does not establish that a
 production repair has been approved or performed.
