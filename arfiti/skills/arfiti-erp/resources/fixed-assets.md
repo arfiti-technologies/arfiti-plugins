@@ -64,6 +64,7 @@ Fixed assets are long-term tangible assets used in business operations (equipmen
 | Category Management | `fixed_asset_category.create`, `fixed_asset_category.update` | Set up asset types with defaults |
 | Asset Lifecycle | `fixed_asset.create`, `fixed_asset.update`, `fixed_asset.attach` | Create and maintain asset records |
 | Acquisition | `fixed_asset.acquire_from_bill`, `fixed_asset.capitalize_expense`, `fixed_asset.capitalize_cwip` | Link assets to source transactions |
+| Correction | `fixed_asset.cancel_capitalization` | Undo a wrong capitalization and release its source cost |
 | Operations | `fixed_asset.transfer`, `fixed_asset.impair`, `fixed_asset.dispose` | Transfer, impair, or dispose assets |
 | Depreciation | `fixed_asset_depreciation.schedule`, `fixed_asset_depreciation.process` | Run monthly depreciation |
 
@@ -453,8 +454,40 @@ How to split a partial amount is the accountant's decision; ask rather than choo
 yourself. What is left on a line stays available for the next capitalization.
 
 **Reversal:** `transaction.reverse` of a capitalization journal is refused while its asset
-stands. No operation yet undoes a capitalization together with its asset; tell the user instead
-of trying another route.
+stands. Undo it with `fixed_asset.cancel_capitalization` (next section), never another route.
+
+---
+
+## Cancelling a Capitalization
+
+Use `fixed_asset.cancel_capitalization` when a capitalization itself was a mistake (wrong
+project, wrong amount, wrong asset). It is an error correction, not a disposal.
+
+```json
+{"legal_entity_id": 13, "fixed_asset_id": 812, "reason": "Capitalised the wrong project"}
+```
+
+- **Ledger:** an asset made by `capitalize_cwip` or `capitalize_expense` has its capitalization
+  journal reversed exactly (same amounts, no new rate), dated on the journal's own date. A closed
+  period is refused, never rolled forward: tell the user the period must be reopened by whoever
+  governs that. An asset made from a bill line (`acquire_from_bill`, `link_source_transaction`)
+  posts no journal; the cost stays on the asset account, unallocated. Ask the user whether to link
+  it to another asset or reclassify it; do not choose the account yourself.
+- **Sources:** the asset's links become `released_<type>`; the same lines can be capitalised again.
+- **Asset:** `cancelled`, inactive, no future depreciation, not in the asset register.
+- **Refused** when depreciation was recognised for the asset (the message names book and period;
+  there is no operation yet that reverses one asset's depreciation, so say so), when the asset was
+  disposed, transferred, impaired or improved, or when its journal also funds another asset.
+- **Whole capitalization only.** No partial amount: cancel, then capitalise the right amount.
+
+**Source documents:** while an asset takes cost from a transaction's lines, that transaction
+cannot be reversed, have its lines replaced, be re-dated or be deleted (even with `force`). The
+refusal names the asset and the amount. Cancel the capitalization first, then change the source;
+never work around the refusal. Applying a credit memo to such a bill is not affected. If the asset
+cannot be cancelled (depreciation, improvement, disposal), tell the user there is no supported undo
+or correction yet and that it needs their accountant; do not suggest a document type or account
+(whether a credit memo should reduce an asset is undecided). The journal a cancellation
+posts is final: it cannot be reversed or edited; capitalise again instead.
 
 ---
 
