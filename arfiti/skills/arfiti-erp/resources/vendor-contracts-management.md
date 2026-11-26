@@ -523,23 +523,21 @@ completed request. The recognizer reads that stored response and checks eligible
 lines again. Declined, held or no-change outcomes require the review-task path;
 the request being completed does not by itself authorize posting.
 
-The 2026-09-23 platform release runs recognition through prepare/recognize/remediate/
-finalize pipeline stages. Reviewed retries use the stored schedules and actor;
+Recognition runs through prepare/recognize/remediate/finalize pipeline stages. Reviewed retries use the stored schedules and actor;
 permissions and response version are checked again at journal posting. An approval
 workflow can remain pending: that is a waiting outcome, not completed recognition.
 The same durable task attempt resumes it without rotating the posting identity.
-An agent preview performs no financial or task writes. Production deployment was
-verified in PR #134; evidence is retained in the completed platform migration record.
+An agent preview performs no financial or task writes.
 
 
-### Contract workflow provenance (QA branch)
+### Contract workflow provenance
 
 Contract detail's workflow summaries are limited to the current organization,
 and each workflow definition must belong to that same organization. All matching
 branches (contract ID, recurring-contract ID, and discovered-agent source) apply
 the shared operational/domain/entity workflow read policy. A contract ID or linked
 agent reference does not itself grant workflow access. Unreadable summaries are
-omitted while the authorized contract remains available. Hosted and full-route acceptance remain separate from the isolated checks.
+omitted while the authorized contract remains available.
 
 
 Contract provenance also filters its source schedule and transaction to the
@@ -552,7 +550,7 @@ otherwise readable source bill. Authorized AP and payroll paths remain supported
 these read checks neither repair historical links nor grant write authority.
 
 
-### Prepaid contract request reads (QA branch, not deployed)
+### Prepaid contract request reads
 
 For `create_vendor_contract` request and response metadata, an explicit source
 bill must resolve to a same-entity AP invoice readable under the existing

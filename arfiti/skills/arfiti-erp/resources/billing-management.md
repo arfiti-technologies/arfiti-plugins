@@ -5,11 +5,11 @@ ratio until each fixed line's monetary amount is rounded. Preview sums those
 rounded line amounts, matching execution's line boundary, rather than rounding
 an aggregate. Full-period/none choices and capability holds are unchanged.
 
-## Durable billing alerts (AR-473 C, local implementation under verification)
+## Durable billing alerts
 
-Migration 754 adds retained billing observations, capability-hold episodes and
-transactional email delivery records. New billing execution requires this storage
-before allocating a run. A receipt and its alert ownership commit together; a
+Billing keeps retained observations, capability-hold episodes and transactional
+email delivery records. Billing execution requires this storage before allocating
+a run. A receipt and its alert ownership commit together; a
 later subject failure cannot erase earlier committed subjects. Repeated observations
 of one held episode reuse its alert; generic failed receipts each retain their own
 alert. Successful observations can clear only the same known service period, and
@@ -47,28 +47,17 @@ exhausted. Retrying cannot change an attempted destination or silently create a
 new provider key. Existing direct agent failure mail is suppressed only by actual
 committed receipt/outbox ownership, not by a supplied flag.
 
-**Deployment order and rollback:** install migration 754, workflow catalog and
-explicit guarded definitions first; verify every tenant and template, including
-new-organization cloning, before releasing receipt-writer code. Missing storage
-fails billing before run allocation; never weaken that check for rolling deploys.
-Drain old billing workers before enabling configured dispatch. Rollback preserves
-all episode/receipt/outbox/attempt evidence. Stop the new worker and retain the
-legacy-email ownership suppression compatibility fix, or prevent the old direct
-failure-mail path from sending during rollback. An old binary without that guard
-can duplicate an accepted or uncertain alert; it is not a safe automatic rollback.
-Do not reset unknown messages, provider keys or attempted payloads to make rollback
-appear successful. No deployment/rollback action is performed by this plan.
-
-These local changes have not activated any provider, recipient configuration or
-production worker. New durable alerts do not decide whether held service should
-be billed, accrued or waived. Hold-decision operations and improved calendar
-arithmetic remain separate unfinished work. Database failure before durable
-capture can only surface as an operational/unknown outcome, not guaranteed mail.
+Missing alert storage fails billing before run allocation. Episode, receipt,
+outbox and attempt evidence is retained; do not reset unknown messages, provider
+keys or attempted payloads. Alerts do not decide whether held service should be
+billed, accrued or waived; record that with `recurring_contract.record_hold_decision`
+(below). A database failure before durable capture surfaces as an operational or
+unknown outcome, not guaranteed mail.
 
 
-## Billing capability checks (AR-473 S0, local, unreleased)
+## Billing capability checks
 
-Shared billing execution and preview now evaluate whether existing arithmetic can
+Shared billing execution and preview evaluate whether existing arithmetic can
 safely represent the stored terms. Weekly, biweekly, monthly, quarterly, semiannual
 and annual cadences with any `billing_interval` of 1 or more are supported when the
 cursor/period and receipt history agree (cadence periods below); `once`, `custom`, a
@@ -155,20 +144,16 @@ undone or represented as having never happened. Standalone usage recording remai
 available without the built-in agent. Authority/storage failures retain their
 existing conservative outcomes.
 
-Optional pipeline 1.0.2 preserves named usage failure reasons in its final result
-and uses the existing source-bound delayed refusal reader. It is registered but
-not activated. Retained 1.0.0 and 1.0.1 still stop unsafe effects, but can display a
-generic usage failure summary; upgrade and drain verification are release gates
-before claiming named-reason coverage for all agent paths. No definition is changed
-by this implementation. Durable alert delivery, hold decisions, new calendar
-arithmetic and editable usage-finality policy remain separate unfinished work.
+The billing run pipeline (1.0.4) preserves named usage failure reasons in its
+final result and uses the source-bound delayed refusal reader. A definition still
+pinned to an older pipeline revision stops unsafe effects the same way but can show
+a generic usage failure summary.
 
 
-## Per-contract execution evidence (AR-473 prerequisite A, local, unreleased)
+## Per-contract execution evidence
 
-New billing execution requires migration 752 before allocating a run or invoice.
-Each new `billing_run_contracts` receipt stores a versioned `terms_snapshot`;
-legacy receipts retain null evidence and must be read as terms not captured.
+Each `billing_run_contracts` receipt stores a versioned `terms_snapshot`; older
+receipts have null evidence and must be read as terms not captured.
 Preview creates no receipt. Snapshot data is bounded to 16 KiB of UTF-8 JSON per
 receipt, rather than accumulated into the run metadata. It records the header
 terms read under the contract lock, the current period-engine revision and cursor,
@@ -190,14 +175,11 @@ original snapshots remain unchanged. Existing explicit billing-run deletion stil
 removes receipts for runs eligible for deletion: this is update immutability while
 the receipt is retained, not a permanent audit archive. A conflicting receipt for
 the same run/contract is refused unless every saved field and snapshot agrees.
-Old writers may still create null snapshots during a rolling deployment; rollout
-must not claim universal capture until all billing workers use the new code.
 
-This prerequisite does not implement unsupported-period holds, reliable alert
-delivery, hold-resolution approval, or new usage-date policy. Existing legacy date
-and payment-term defaults are observed, not endorsed as universal accounting rules.
+The snapshot records date and payment-term defaults as observed; it does not
+endorse them as universal accounting rules.
 
-## Billing input compatibility matrix (local, unreleased)
+## Billing input compatibility matrix
 
 Execute and preview accept `legal_entity_id`, `legal_entity_ids`, `contract_ids`,
 `customer_id`, `billing_date`, `auto_post`, `auto_post_invoices`, `dry_run` and
@@ -214,34 +196,33 @@ metadata. Preview does not persist notes.
 Unknown business fields are refused by name before allocation. Known legacy
 scheduler, saga and task callback envelope fields remain inert compatibility
 data; they never establish actor, organization or approval authority. Nested
-job business restrictions must agree with effective submitted restrictions;
-retained 1.0.0 cannot silently discard a nested contract/customer/date filter.
+job business restrictions must agree with effective submitted restrictions; a
+nested contract/customer/date filter is never silently discarded.
 A nested legacy default entity must agree with the effective entity; billing
 schedules refuse this per-run override before emitting events.
 Server `_billing_task` binding retains its separate authority and replay checks.
 
-Billing pipeline 1.0.4 (the 1.0.1 scope handling, the 1.0.2 named usage outcomes, the 1.0.3 durable waits and authenticated attribution, and the 1.0.4 per-contract usage answers of AR-1102), the shipped default, sends canonical business payloads and reads its
-actual saved event. Recognized saved scheduler and dashboard/MCP scheduled-job
+The billing run pipeline (1.0.4: scope handling, named usage outcomes, durable
+waits, authenticated attribution and per-contract usage answers) sends canonical
+business payloads and reads its actual saved event. Recognized saved scheduler and dashboard/MCP scheduled-job
 run-once envelopes normalize their absent-scope sentinels; arbitrary caller
 null or empty scope is still refused. A legacy dashboard Run once event that names
 the first entity and a different multi-entity list is refused. The integrated
 billing Run once producer now emits one singleton-scoped event per selected
 entity in a single transaction; it never reduces the requested list to the
-first entity. This dispatch queues work and does not prove invoice completion. Per-run notification, assignment and
-default-entity configuration overrides are explicitly unsupported by
-1.0.3 and 1.0.4: edit the agent configuration instead. Existing authored configuration
+first entity. This dispatch queues work and does not prove invoice completion.
+Per-run notification, assignment and default-entity configuration overrides are
+not supported: edit the agent configuration instead. Existing authored configuration
 remains supported. The old `emit_delivery_events` and `emit_payment_events`
 booleans are inert compatibility values; they do not control invoice events.
-Retained 1.0.0 blocks and global runner behavior are unchanged. In particular,
-runner `state.config` merging does not make billing blocks' `context.config`
-read per-run overrides. Inventory existing job payloads/custom pipelines before
-rollout. A definition with an active revision keeps its pinned pipeline until the
-1.0.4 release is published and activated for it; one without an active revision
-reads the shipped `pipeline.yaml` and runs 1.0.4 once deployed.
+Runner `state.config` merging does not make billing blocks' `context.config` read
+per-run overrides. A definition with an active revision keeps that revision's
+pinned pipeline until a newer revision is published and activated for it; one
+without an active revision runs the shipped pipeline (1.0.4).
 
-### Usage record rollback evidence (local, unreleased)
+### Usage record rollback evidence
 
-`contract_usage.record` now has its own bounded rollback evidence. Only explicitly
+`contract_usage.record` has its own bounded rollback evidence. Only explicitly
 owned usage checks after source authority validation can create it, and only after
 the executor's full transaction rollback is acknowledged. The result binds the
 organization, explicit entity, contract line, exact payload and any reviewed
@@ -256,21 +237,17 @@ definitive only after that receipt commit is acknowledged; replay checks the
 same workflow, source and payload and rejects contradictory successful evidence.
 Human usage execution rechecks the submitter's current authority and the saved
 workflow definition's configured permission. Existing definitions with no configured
-permission do not acquire a new universal permission floor. The optional billing
-1.0.1 pipeline consumes this exact usage proof separately from billing execute
-preflight; a later billing refusal never erases earlier usage. Existing 1.0.0 stays
-unchanged. No country/accountant policy, pipeline activation or production repair
-is introduced.
+permission do not acquire a new universal permission floor. The billing pipeline
+consumes this exact usage proof separately from billing execute preflight; a later
+billing refusal never erases earlier usage.
 
-
-Local billing 1.0.1 is an explicit opt-in candidate; retained 1.0.0 is unchanged.
 Only bound execute preflight evidence can establish a no-billing-effect refusal.
 Approval receipt recovery requires committed, matching evidence; missing/conflicting
 receipts stay unknown. Preserve request identity after uncertainty. Usage recording has a separate bounded owned-transaction proof; retry and partial
 invoices are not certified by billing execute preflight.
 
 
-## Exact billing request scope and scheduled dispatch (local, unreleased)
+## Exact billing request scope and scheduled dispatch
 
 Billing workflows re-check the current submitter authority and the referenced
 definition’s configured permission when execution starts, including after approval.
@@ -1511,7 +1488,7 @@ required. Existing erroneous invoices require audited reversal, not deletion.
 Billing-run cancellation reverses each invoice on the later of the cancellation date and that invoice's transaction date. Cancelling a future-dated invoice therefore does not introduce a reversal into an earlier accounting period. Normal period validation still applies; a blocked reversal rolls back the cancellation.
 
 
-### Bill and billing-usage request reads (QA branch, not deployed)
+### Bill and billing-usage request reads
 
 Admin and MCP request readers require `ap:read` for the installed `review_bill`
 action and `ar:read` for `provide_usage_data`. These requirements apply even to
@@ -1520,11 +1497,10 @@ actions in response metadata. They add to existing domain/entity checks. Every
 member of a thread must be readable before rows, counts and pages are returned;
 a thread containing both actions requires both domains. Wildcard grants retain
 both domains. Other actions are not classified by this change. Read access does
-not authorize approval, posting, changing a draft or supplying usage. Broader
-structured-reference and hosted-role acceptance remains open.
+not authorize approval, posting, changing a draft or supplying usage.
 
 
-### Stored review and usage references (QA branch, not deployed)
+### Stored review and usage references
 
 For `review_bill`, a supplied draft ID and revision must resolve together to a
 stored revision of a draft in the request entity. A linked transaction must be
@@ -1540,13 +1516,13 @@ The producer allows an absent billing-run ID; it remains supported. Checks apply
 to request and response metadata before rows, counts and pagination. Responses
 inherit the originating request action even when they omit their own action. Approval,
 posting and usage submission still perform their existing live validations.
-Bill-review draft active requests now use the same cycle-safe request/thread
+Bill-review draft active requests use the same cycle-safe request/thread
 authority, including response metadata. Missing, foreign or forbidden links deny
-the review; absent optional links and readable cycles remain supported. The bounded draft workflow graph is described below. Source attachments and
-arbitrary embedded metadata remain outstanding read-authority coverage.
+the review; absent optional links and readable cycles remain supported. The bounded draft workflow graph is described below. These checks do not
+cover source attachments or arbitrary embedded metadata.
 
 
-### Bill draft workflow authority (QA branch, not deployed)
+### Bill draft workflow authority
 
 Bill-review request reads follow a stored draft's optional `workflow_id`. The
 workflow and its definition must belong to the request organization, and its
@@ -1567,11 +1543,10 @@ Response review metadata and virtual execution metadata use the same rules.
 These are historical read-authority checks, not approval, current-revision or
 posting authorization. They neither change stored pointers nor repair workflows.
 Other object-link families retain their existing domain checks; this does not
-certify every nested reference, source attachment or free-text narrative. Hosted
-identity and representative performance acceptance remain open.
+certify every nested reference, source attachment or free-text narrative.
 
 
-### Customer tax-profile task reads (QA branch, not deployed)
+### Customer tax-profile task reads
 
 Tasks with `set_customer_tax_profile` require `ar:read` or `master_data:read`,
 matching customer read permissions, even when owner/source hints are absent.
@@ -1588,42 +1563,36 @@ payloads remain supported.
 These checks apply before list counts/pages and to virtual execution metadata.
 They do not grant tax-profile editing or change the delegation/retry workflow.
 Do not substitute entity-link IDs or alter stored tasks to bypass a refusal.
-Arbitrary context text, other master-data actions and hosted identity acceptance
-remain outside this bounded verification.
+These checks do not cover arbitrary context text or other master-data actions.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Billing coverage in close checks
 
-The close check reports each contract’s recorded attempts separately from service-period coverage. A completed run header alone no longer proves coverage. Recorded billed intervals and eligible same-entity invoices dated by period end establish coverage; the current engine schedule classifies gaps. A future billing pointer, no-usage skip, or manual invoice description never proves coverage. A convention invoice date falling after period end is labelled “accrual not tested”. No new billing policy block is introduced: incomplete coverage retains the old no-completed-run failure or reports a warning when that old check passed.
+The close check reports each contract’s recorded attempts separately from service-period coverage. A completed run header alone does not prove coverage. Recorded billed intervals and eligible same-entity invoices dated by period end establish coverage; the current engine schedule classifies gaps. A future billing pointer, no-usage skip, or manual invoice description never proves coverage. A convention invoice date falling after period end is labelled “accrual not tested”. Incomplete coverage fails when no completed run exists for the period and is reported as a warning when one does.
 
-### Complete billing failure evidence (local implementation)
+### Complete billing failure evidence
 
 Billing execution retains every collected per-contract error in the returned
 `errors` list and saved run summary. The built-in failure email and textual run
 summary also list every available error. Legacy workers that supply fewer errors
 than their failure count still disclose the missing count; missing details are
-not invented. Usage-request email display limits are unchanged.
+not invented. Usage-request email display limits still apply. Older truncated
+summaries are not repaired.
 
-This does not add period containment, guarantee email delivery/retry, or repair
-historical truncated summaries. Existing failure classifications and per-contract
-transaction behavior are unchanged.
+### Payment racing billing cancellation
 
-### Payment racing billing cancellation (AR-350, local implementation)
-
-Cancellation now acquires the existing shared revaluation boundary before locking
+Cancellation acquires the existing shared revaluation boundary before locking
 its billed invoices in ID order. The paid/partially-paid check reads those locked
 rows, so a payment committed while cancellation waits prevents reversal. The
 operator must unwind the payment through its supported flow before cancelling.
 No accounting date policy or payment reversal is performed automatically.
 
-This fixes the payment-before-invoice-lock race only. It does not freeze a run's
-receipt set against concurrent billing, or certify every cancellation/contract
-writer lock ordering. Historical records are not repaired.
+This covers a payment that commits before the invoice lock. It does not freeze
+a run's receipt set against concurrent billing.
 
 Cancellation rechecks run status after waiting for invoice locks. A request
 that loses to another completed cancellation returns an already-cancelled
-refusal. This does not change legacy recovery for billed receipts without an
-invoice, and does not establish complete concurrent run/receipt-set protection.
+refusal.
 
 ## Scoped billing hold decisions and evidence report (on by default)
 
@@ -1650,7 +1619,7 @@ citations are labelled caller-supplied, never certified documents.
 section, limit, cursor})` requires current `ar:read` and entity scope. Sections are
 `contracts`, `usage`, `tasks`, `decisions`; retrieve every section and follow its
 `next_cursor` until `truncated=false`. Page counts are not full-selection totals.
-Current S0 capability is distinct from historical receipt evidence; unsupported
+Current capability is distinct from historical receipt evidence; unsupported
 service has no invented engine amount. Failure count greater than one is a factual
 repeat label, not a policy threshold. Suspended/stub contracts, unbilled usage,
 open tasks and retained decisions remain visible. Usage with no resolvable stored
@@ -1663,19 +1632,12 @@ Decision detail compares captured contract/line/reference evidence with live dat
 labels changed/missing/unverified evidence, and exposes all superseding branches.
 A recorded decision never implies the treatment was executed. Alerts' queued,
 accepted or unknown delivery states remain separate. No global accountant policy
-or human-only close requirement is installed. Schema/catalog/guarded definition
-setup precedes code rollout; verify default new-organization cloning and preserve
-custom approval settings. Production installation and activation are not performed
-by this local change.
+or human-only close requirement is installed.
 
 
-### Opt-in billing pipeline 1.0.3: durable waiting outcomes
+### Billing pipeline: durable waiting outcomes
 
-Pipeline block version 1.0.3 is available as an explicit opt-in candidate; it is
-not the default and does not upgrade saved organization definitions. Retained
-1.0.0, 1.0.1 and 1.0.2 implementations are unchanged.
-
-A saved pending workflow produces a `waiting_workflow` outcome while allowing
+In the billing run pipeline, a saved pending workflow produces a `waiting_workflow` outcome while allowing
 the orchestration host to finish its current step. This is a durable wait, not
 confirmation that usage or invoicing completed. The existing configured approval
 and current authority checks still apply when that workflow executes. Unknown
@@ -1683,10 +1645,6 @@ posting state and failures take precedence over a pending workflow. Missing
 workflow identity cannot be reported as a recoverable approval wait; it is
 reported for attention/recovery instead. Receipt-backed resumption still decides
 whether the original task completed.
-
-Before rollout, inventory customized definitions, explicitly select the reviewed
-block version and drain older workers. Merely registering this code activates no
-policy, sends no notification and changes no production definition.
 
 Billing execute/retry identity comes from the authenticated agent runtime.
 Conflicting supplied identity fields are rejected; they are not accepted as
@@ -1702,11 +1660,10 @@ and entity access against the entire requested scope. Invalid or inaccessible
 scope refuses before any event is written. A deliberately disabled schedule can
 still be run manually; a disabled agent definition cannot.
 
-Each selected entity gets one singleton-scoped event, compatible with retained
-1.0.0 and opt-in 1.0.3 consumers. All events and job tracking commit together; a
+Each selected entity gets one singleton-scoped event. All events and job tracking commit together; a
 failure writing any event rolls back the whole dispatch. This action queues
 billing work; it does not report that invoices were created. Reconciliation-only
-period overrides are refused on billing jobs. No saved definition is upgraded.
+period overrides are refused on billing jobs.
 
 ### Hold evidence in close checks
 

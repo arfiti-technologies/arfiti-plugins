@@ -39,8 +39,7 @@ update the role through the governed `role` workflows, then assign it with expli
 do not widen a shared AP role or substitute `accounting:write`. This grant does not
 confer AR/AP posting, general ledger writes or bank account administration, and
 additional workflow permissions still apply. Bank agent task-answer authority is
-a separate check and is not broadened by this grant. The AR-1434 catalog change must be
-deployed before this grant can be provisioned. `banking:write` is broader: it also
+a separate check and is not broadened by this grant. `banking:write` is broader: it also
 authorizes bank-feed import through `bank_statement.sync` and existing Plaid
 connection creation, linking, mapping, import-start changes and disconnection. Do not substitute it for narrowly approved line access.
 
@@ -917,18 +916,14 @@ callers. Compensation, tax settings, and deduction queries always constrain
 stored entity IDs, even when a request supplies only a global employee ID.
 
 
-### Unreleased wizard integration (2026-10-01)
+### Admin setup wizard
 
-Production-release reconciliation is in progress. The new Admin setup wizard
-retains subject-only membership lookup and verified-email signup; matching an
-email never authorizes changing an existing account's Auth0 identity. A pending
-invitation must be accepted before separate-company signup. Existing-company
-setup and onboarding key creation/reveal require owner/admin membership.
-Do not describe this integration as deployed or the role-testing program as
-complete: full migration/release verification and production acceptance are still pending.
-The old signup endpoints are removed; use the current Admin wizard, whose setup
-transaction includes the schema and audit receipt. Local real-database tests cover
-creation, retry, identity/invitation denial and rollback.
+The Admin setup wizard uses subject-only membership lookup and verified-email
+signup; matching an email never authorizes changing an existing account's sign-in
+identity. A pending invitation must be accepted before separate-company signup.
+Existing-company setup and onboarding key creation/reveal require owner/admin
+membership. The setup transaction includes the schema and audit receipt, and
+creation, retry, identity/invitation denial and rollback are handled inside it.
 
 
 ### Member page: membership and accounting permissions
@@ -1037,12 +1032,12 @@ Restoring operational access restores the normal feed.
 Admin-only alerts additionally require current owner/admin membership; historical
 recipient assignment does not preserve access after a downgrade. These checks
 apply when the feed or count is requested. Linked workflow task/instance notifications
-now also require current entity access and the workflow AP/AR object-domain and payroll-payload read policy.
+also require current entity access and the workflow AP/AR object-domain and payroll-payload read policy.
 Agent-request links require entity access and the request thread's domain/provenance
 policy. These predicates apply before pagination and unread counts; missing or
-malformed supported links are withheld. Unlinked/free-text notifications, other
-routes and other workflow object-domain classification remain open. No migration or
-role reconfiguration is required; hosted acceptance is not yet verified.
+malformed supported links are withheld. Unlinked and free-text notifications, links to
+other routes and other workflow object families are not classified by business
+domain. No migration or role reconfiguration is required.
 
 
 ### Read-only workflow mutation boundary
@@ -1101,7 +1096,7 @@ coverage. Do not interpret assignment or a general operational grant as proof
 that those remaining boundaries have been verified.
 
 
-### Workflow read hardening (implementation branch; release verification pending)
+### Salary batches and MCP workflow reads
 
 Salary payment batches require `payroll:read` in addition to the existing
 batch-read grant. Employee expense reimbursement lines alone do not make a
@@ -1128,13 +1123,12 @@ batched get, list/search and count apply the payroll/entity filter in SQL before
 pagination; generic payment-batch reads also exclude salary batches without
 payroll access. This does not grant approval authority or execute a workflow.
 
-Remaining scope: agent request/response business-domain isolation; full Admin
-entity/domain parity beyond the payroll workflow check; legacy manual salary
-batches without identifiable salary provenance. Do not treat this scope as
-complete certification of all read surfaces. No schema migration is required.
+Not covered by these checks: full Admin entity/domain parity beyond the payroll
+workflow check, and legacy manual salary batches without identifiable salary
+provenance. No schema migration is required.
 
 
-### Agent request domain reads (implementation branch; release verification pending)
+### Agent request domain reads
 
 Agent request detail, outcome, review lines, linked request summaries, task-thread
 readers, My Tasks and waiting counts
@@ -1157,17 +1151,15 @@ reading that thread. Lists/counts filter before pagination. An authorized owner
 should correct source metadata through normal supported administration; do not
 remove provenance or grant broader access simply to make a task visible.
 
-This is not complete classification of arbitrary legacy request bodies.
-Unclassified free text, unknown source types and arbitrary nested payloads
-remain outside verified domain coverage. The new guard does not certify all
-agent execution logs or every Admin surface. Production rollout and the exact
-verification evidence are tracked in the canonical permissions QA plan.
+Unclassified free text, unknown source types and arbitrary nested payloads in
+legacy request bodies are not classified by domain. This guard does not cover
+every agent execution log or Admin surface.
 
 Agent request batch references are additive: when both `batch_id` and `payment_batch_id` are supplied in request or response metadata, each is checked. An expense batch reference cannot override a salary batch reference.
 
-#### Execution-domain read checks (PR284 deployed 2026-10-12)
+#### Execution-domain read checks
 
-Agent session and saga detail/list/count readers are being guarded before
+Agent session and saga detail/list/count readers are guarded before
 pagination by the same explicit business-domain provenance as requests.
 Payroll agent families, input/output metadata, log envelopes and their data,
 linked request threads, workflow actions, saga phases and checkpoint request /
@@ -1175,69 +1167,68 @@ close-workflow references are additive checks. Missing linked records deny
 access; a permission lookup failure does not return execution payloads.
 AP expense/bill access and authorized payroll access remain separate.
 This does not classify arbitrary free text or unknown legacy metadata, and does
-not certify every agent memory/metrics surface. Database and release evidence
-must be checked in the canonical permissions QA plan before claiming rollout.
+not cover every agent memory/metrics surface.
 
-Execution read checks also include stored workflow object links: a transaction or payment-batch link adds its stored domain requirement even when the workflow payload omits the reference. These checks are additive to payload and entity checks; arbitrary free-text classification remains outside this scope. PR284 deployment was verified on all three Railway services on 2026-10-12; restricted-account synthetic bank reads and excluded-entity lists passed live smoke checks. Sensitive payroll denials are covered by isolated SQL fixtures, not live salary inspection. Production-scale query performance remains unverified.
+Execution read checks also include stored workflow object links: a transaction or payment-batch link adds its stored domain requirement even when the workflow payload omits the reference. These checks are additive to payload and entity checks; arbitrary free text is not classified.
 
 
-### Workflow configuration authority (implementation pending release)
+### Workflow configuration authority
 
 Definition payload requirements, related-entity and lane rules, submitter-review settings, step creation/editing/deletion/reordering, lane skips, entity overrides and activation changes require owner or admin membership. Organization access checks still apply; task-review and decision permissions are unchanged. Deleting a step referenced by an instance refuses rather than deleting pending tasks or history.
 
-`get_workflow(action="get", definition_id=...)` returns the current organization's configuration and content revision under live owner/admin authority. Snapshots cover definitions, steps, conditions, overrides, automations, escalations, required fields, dimensions and notifications, including lane and velocity rules. `manage_workflow(action="update")` requires `expected_revision` from `get` and a `changes` object. It atomically replaces an active definition, returns the new definition ID/revision, and leaves existing instances linked to their original definition. Inactive or stale sources refuse. Full editor integration and validation remain under development.
+`get_workflow(action="get", definition_id=...)` returns the current organization's configuration and content revision under live owner/admin authority. Snapshots cover definitions, steps, conditions, overrides, automations, escalations, required fields, dimensions and notifications, including lane and velocity rules. `manage_workflow(action="update")` requires `expected_revision` from `get` and a `changes` object. It atomically replaces an active definition, returns the new definition ID/revision, and leaves existing instances linked to their original definition. Inactive or stale sources refuse.
 
-The internal draft editor creates an inactive version, preserves the source and existing instance links, and writes an attributed audit record in the same transaction. An audit failure rolls back the entire draft. Omitted settings remain unchanged. A complete desired step list can reuse source steps, add/reorder steps or omit them from the new version; conditions can be replaced per step. Content revisions detect stale edits. Transaction locks serialize version allocation and prevent child edits while a draft is copied. Legacy UI editing outside the clone transaction still needs migration to versioned edits.
+The draft action creates an inactive version, preserves the source and existing instance links, and writes an attributed audit record in the same transaction. An audit failure rolls back the entire draft. Omitted settings remain unchanged. A complete desired step list can reuse source steps, add/reorder steps or omit them from the new version; conditions can be replaced per step. Content revisions detect stale edits. Transaction locks serialize version allocation and prevent child edits while a draft is copied.
 
-Direct and rule-based user targets must be active organization members. Roles must be active system/current-organization roles. Employee targets must be active in the organization and linked to an active member; supplied employee identifiers must agree. The engine accepts Admin `roleName` and legacy `role`, rejecting conflicting aliases. Dimension approvers now resolve the workflow header dimension (including a server-frozen derived header) through the entity-scoped dimension repository. The selected master value metadata must contain an integer approver_employee_id, manager_employee_id or owner_employee_id pointing to an active employee with current employment in that entity and active human organization membership. Missing, inactive or ambiguous values refuse instead of selecting a fallback admin. Full rule/runtime parity remains under review.
+Direct and rule-based user targets must be active organization members. Roles must be active system/current-organization roles. Employee targets must be active in the organization and linked to an active member; supplied employee identifiers must agree. The engine accepts Admin `roleName` and legacy `role`, rejecting conflicting aliases. Dimension approvers resolve the workflow header dimension (including a server-frozen derived header) through the entity-scoped dimension repository. The selected master value metadata must contain an integer approver_employee_id, manager_employee_id or owner_employee_id pointing to an active employee with current employment in that entity and active human organization membership. Missing, inactive or ambiguous values refuse instead of selecting a fallback admin.
 
-Supplied velocity lists persist validated defaults (`total_amount`,24 hours,red escalation), so omitted fields cannot silently fall back to a different engine amount field. Explicit null lane settings are rejected; omitted lanes stay unchanged. Atomic replacement refuses payment definitions without a usable human review step and review steps without an approver. Runtime payment safeguards still apply to actual routing. Grouped lane conditions preserve their AND semantics; existing legacy lane lists are normalized when patched. Remaining work includes embedded reference migration, broader activation/routing validation, full UI write integration and release verification. These internal capabilities do not authorize payment decisions or transmission.
+Supplied velocity lists persist validated defaults (`total_amount`,24 hours,red escalation), so omitted fields cannot silently fall back to a different engine amount field. Explicit null lane settings are rejected; omitted lanes stay unchanged. Atomic replacement refuses payment definitions without a usable human review step and review steps without an approver. Runtime payment safeguards still apply to actual routing. Grouped lane conditions preserve their AND semantics; existing legacy lane lists are normalized when patched. These configuration capabilities do not authorize payment decisions or transmission.
 
-Unreleased condition parity: lane text rules support contains and starts_with, and SQL equality aliases (=, <>) remain accepted. New authoring input rejects malformed membership values, nonboolean exists values, nonfinite numeric thresholds and invalid regular expressions before a version is inserted. Dimension rules are accepted in the local tool contract with dimensionTypeId and metadataField; lookup and actual task assignment are covered by isolated fixtures. Line-only dimensions require a configured, unambiguous header derivation; the resolver does not pick an arbitrary line. This remains unreleased.
+Condition rules: lane text rules support contains and starts_with, and SQL equality aliases (=, <>) are accepted. Authoring input rejects malformed membership values, nonboolean exists values, nonfinite numeric thresholds and invalid regular expressions before a version is inserted. Dimension rules use dimensionTypeId and metadataField. Line-only dimensions require a configured, unambiguous header derivation; the resolver does not pick an arbitrary line.
 
-Local editor integration now has a shared internal configuration endpoint and session-attributed Admin getConfiguration/reviseConfiguration procedures. The backend rechecks live admin membership and returns an explicit conflict for stale/inactive sources. Editor controls still need migration from legacy mutation procedures; the presence of this endpoint does not certify UI history preservation or production availability.
+Admin editors read and save configuration through the session-attributed getConfiguration/reviseConfiguration procedures, backed by the same shared configuration service. The backend rechecks live admin membership and returns an explicit conflict for stale/inactive sources.
 
-The local step editor now uses the shared revision service for add/edit/delete/reorder. It loads a fixed configuration snapshot before enabling edits, reports conflicts without retrying against a newer revision, blocks duplicate saves and opens the returned new definition. Other legacy controls still need migration. The existing escalation-role selector was not persisted by the legacy router and remains an open integration gap; full authoring is not released.
+The step editor uses the shared revision service for add/edit/delete/reorder. It loads a fixed configuration snapshot before enabling edits, reports conflicts without retrying against a newer revision, blocks duplicate saves and opens the returned new definition.
 
-Local routing editor changes: lane rules and step-lane skips now save through the revision service. The routing overview shows saved velocity rules; admins can add/remove/edit grouping, rolling hours, amount/payee fields, threshold and escalation level. An inherited threshold is ineffective without a matching red-lane amount threshold. Existing omitted amount fields retain the engine legacy amount default when saved, while new rules explicitly use total_amount. Grouped conditions retain AND semantics within a rule and OR across rules; red is checked before yellow, with green as fallback. Other configuration controls still require parity review before release.
-
-
-Unreleased payload-field editing: `changes.payload_fields` accepts required/optional lists of field specifications (field, type, description). The shared service creates a new version, preserves system-owned fields, existing extra field metadata, identifier alternatives and specialized transaction contracts. System-field edits and duplicate fields refuse. The general Admin Fields tab uses the viewed revision and reports conflicts; it does not retry against unseen configuration. The specialized transaction editor is covered by the versioned transaction-field contract below. Remaining legacy endpoints still need review, so full authoring/history parity is not yet certified.
+Routing editor: lane rules and step-lane skips save through the revision service. The routing overview shows saved velocity rules; admins can add/remove/edit grouping, rolling hours, amount/payee fields, threshold and escalation level. An inherited threshold is ineffective without a matching red-lane amount threshold. Existing omitted amount fields retain the engine legacy amount default when saved, while new rules explicitly use total_amount. Grouped conditions retain AND semantics within a rule and OR across rules; red is checked before yellow, with green as fallback.
 
 
-Unreleased conditional-assignment hardening: assign_to requires exactly one positive user_id, employee_id or role, without extra keys. The shared validator checks active organization roles and active human membership; employee targets must be active and linked. It validates copied conditions as well as edited conditions. A matched but empty/ambiguous target, unavailable employee/user/role or unresolved role refuses instead of silently assigning the default approver. Tests use isolated fixtures and create no live tasks. Advanced change_lane/additional-approval actions and automatic condition decisions remain open runtime gaps, not accepted capabilities.
+Payload-field editing: `changes.payload_fields` accepts required/optional lists of field specifications (field, type, description). The shared service creates a new version, preserves system-owned fields, existing extra field metadata, identifier alternatives and specialized transaction contracts. System-field edits and duplicate fields refuse. The general Admin Fields tab uses the viewed revision and reports conflicts; it does not retry against unseen configuration. The specialized transaction editor is covered by the versioned transaction-field contract below.
 
 
-Unreleased automatic rejection: a matching auto_reject condition on a lane-eligible step now terminates the new workflow as rejected, records an auto_reject policy action with the matching step IDs, and skips other instantiated steps. final_decision_by is empty because no human made the decision. No approval tasks or operation executor run. The submission gateway reports workflow_rejected rather than pending approval. Rejection notifications are exercised only with mocked delivery in local tests. auto_approve, change_lane and require_additional_approval remain incomplete and must not be advertised as working.
+Conditional assignment: assign_to requires exactly one positive user_id, employee_id or role, without extra keys. The shared validator checks active organization roles and active human membership; employee targets must be active and linked. It validates copied conditions as well as edited conditions. A matched but empty/ambiguous target, unavailable employee/user/role or unresolved role refuses instead of silently assigning the default approver.
 
 
-Unreleased condition lane routing: change_lane accepts exactly a green/yellow/red target. It can raise the lane but cannot lower risk imposed by base rules, bank-detail controls or velocity rules. Lane-eligible condition steps are evaluated to a stable final lane before steps/tasks are selected; newly eligible steps can raise it again. Submission audit records the base lane, final lane and lane-condition step IDs. Payload edits and payment-line corrections use the same calculation and refuse a change to the reviewed lane. The required human payment-review check remains in place: a routing change that skips all review steps rolls back rather than executing. Automatic approval behavior remains unchanged and incomplete; additional-approval action support remains open.
+Automatic rejection: a matching auto_reject condition on a lane-eligible step terminates the new workflow as rejected, records an auto_reject policy action with the matching step IDs, and skips other instantiated steps. final_decision_by is empty because no human made the decision. No approval tasks or operation executor run. The submission gateway reports workflow_rejected rather than pending approval. An auto_approve condition can be saved, but it makes no decision: the step is still created and needs its human decision.
 
 
-Unreleased additional-review routing: require_additional_approval uses action_config.step_id for another existing approval/review/change_request step in the same definition. The target must remain in the desired version; self, foreign/missing, removed and non-human targets refuse. Version cloning remaps both copied and edited condition references to the new step IDs. New steps must first obtain a persisted ID before a later edit references them. A matching condition adds a required human review despite the target's lane/conditional skips; it never records an approval. Additive review requirements and lane escalation resolve together before task creation. Payload/line corrections that change the instantiated review set, conditional assignee or match a rejection rule refuse and require rejection/resubmission. Dynamic dimension-assignee changes still require broader parity review. Automatic-approval support remains incomplete and is not enabled by this change.
+Condition lane routing: change_lane accepts exactly a green/yellow/red target. It can raise the lane but cannot lower risk imposed by base rules, bank-detail controls or velocity rules. Lane-eligible condition steps are evaluated to a stable final lane before steps/tasks are selected; newly eligible steps can raise it again. Submission audit records the base lane, final lane and lane-condition step IDs. Payload edits and payment-line corrections use the same calculation and refuse a change to the reviewed lane. The required human payment-review check remains in place: a routing change that skips all review steps rolls back rather than executing.
 
 
-Unreleased Admin condition editor: the step dialog now displays existing conditions and supports adding/removing grouped conditions, typed values, inclusion/skipping, named role/linked-person assignment, upward risk-lane changes, another configured human review and policy rejection. Additional-review choices exclude the current/non-human steps. Saving submits the viewed revision and a validated desired condition list; conflicts are shown inside the dialog. Condition order must be unique, and rows in one group must agree on All/Any matching. Existing automatic-approval rules are labelled unsupported and cannot be added from this editor. Their runtime gap and other legacy editing surfaces remain open.
+Additional-review routing: require_additional_approval uses action_config.step_id for another existing approval/review/change_request step in the same definition. The target must remain in the desired version; self, foreign/missing, removed and non-human targets refuse. Version cloning remaps both copied and edited condition references to the new step IDs. New steps must first obtain a persisted ID before a later edit references them. A matching condition adds a required human review despite the target's lane/conditional skips; it never records an approval. Additive review requirements and lane escalation resolve together before task creation. Payload/line corrections that change the instantiated review set, conditional assignee or match a rejection rule refuse and require rejection/resubmission.
 
-Local unreleased dimension-edit guard: workflow payload corrections and payment-line payload synchronization now resolve dimension approver dependencies against both the stored and proposed payload before saving. A changed or unresolved reviewer refuses the edit; reject and resubmit to establish a new route. Included steps use the saved approver rules; conditional assignee overrides and submitter-assigned steps take precedence. Dimension fallback dependencies are checked conservatively even when another rule may currently win. This does not reassign existing tasks or record decisions, and does not certify handling of later changes to employee/dimension master data.
 
-Unreleased escalation authoring foundation: per-step escalations is a complete replacement list; omission preserves saved rules and [] removes them only from the new version. Each rule requires a unique positive escalation_order, positive trigger_after_hours and exactly one current-organization active role or human user target (escalate_to_role / escalate_to_user_id). include_previous_assignee defaults true, reassign_task false, increase_priority true; explicit values persist. Targets are revalidated when copying existing rules. Historic definitions and instances remain unchanged. This persistence work does not yet connect rule targets/reassignment to the reminder scanner or editor; do not claim those behaviors work until runtime acceptance is complete.
+Admin condition editor: the step dialog displays existing conditions and supports adding/removing grouped conditions, typed values, inclusion/skipping, named role/linked-person assignment, upward risk-lane changes, another configured human review and policy rejection. Additional-review choices exclude the current/non-human steps. Saving submits the viewed revision and a validated desired condition list; conflicts are shown inside the dialog. Condition order must be unique, and rows in one group must agree on All/Any matching. The action list also offers Approve the submission (auto_approve); it is saved but makes no decision at run time.
 
-Unreleased configured escalation runtime: due rules are applied once per task in escalation order while the task, step and workflow remain pending. The task and workflow are locked in the same order as human decisions. The named role/user must currently be an active human member with access to the workflow's entity and business domain; there is no fallback to an unrelated administrator. Reassignment also requires mutation authority and refuses self-review for human review steps except explicit submitter assignment. A rule may raise priority and reassign the pending task, but does not approve, reject or execute a workflow. Original assignment time is preserved so later rule deadlines do not restart. A system escalation action records the rule and previous/target assignee; each rule is applied once. Notifications are attempted after the transaction commits. A delivery failure does not repeat reassignment; inspect notification/worker logs for recovery rather than deleting audit history. Prior assignees receive a copy only if configured and still authorized. Steps with configured rules do not also use the legacy escalation_hours reminder. Custom notification-template selection, editor integration, concurrency stress and final release review remain open.
+Dimension-edit guard: workflow payload corrections and payment-line payload synchronization resolve dimension approver dependencies against both the stored and proposed payload before saving. A changed or unresolved reviewer refuses the edit; reject and resubmit to establish a new route. Included steps use the saved approver rules; conditional assignee overrides and submitter-assigned steps take precedence. Dimension fallback dependencies are checked conservatively even when another rule may currently win. This does not reassign existing tasks or record decisions, and does not react to later changes in employee/dimension master data.
 
-Unreleased escalation editor: each step now exposes multiple escalation stages with a deadline, named role/person, previous-assignee notification, pending-task reassignment and priority controls. Add/remove stages through the versioned save; clearing the list removes only the new version's rules. The separate simple overdue reminder applies only when no configured escalation rules exist. Existing custom notification-template rules are displayed but remain read-only in this editor, and are preserved during unrelated step edits; custom template delivery/editing is still open. The ignored legacy escalation_role field is no longer sent.
+Escalation rules: per-step escalations is a complete replacement list; omission preserves saved rules and [] removes them only from the new version. Each rule requires a unique positive escalation_order, positive trigger_after_hours and exactly one current-organization active role or human user target (escalate_to_role / escalate_to_user_id). include_previous_assignee defaults true, reassign_task false, increase_priority true; explicit values persist. Targets are revalidated when copying existing rules. Historic definitions and instances remain unchanged.
 
-Workflow notification configuration requires owner/admin authority. The local draft closes a legacy member-write gap; this correction is not yet deployed. Legacy notification JSON switches and actual per-event delivery settings still require migration and verification; do not claim tool/UI parity for notifications yet.
+Configured escalation runtime: due rules are applied once per task in escalation order while the task, step and workflow remain pending. The task and workflow are locked in the same order as human decisions. The named role/user must currently be an active human member with access to the workflow's entity and business domain; there is no fallback to an unrelated administrator. Reassignment also requires mutation authority and refuses self-review for human review steps except explicit submitter assignment. A rule may raise priority and reassign the pending task, but does not approve, reject or execute a workflow. Original assignment time is preserved so later rule deadlines do not restart. A system escalation action records the rule and previous/target assignee; each rule is applied once. Notifications are attempted after the transaction commits. A delivery failure does not repeat reassignment; inspect notification/worker logs for recovery rather than deleting audit history. Prior assignees receive a copy only if configured and still authorized. Steps with configured rules do not also use the legacy escalation_hours reminder.
 
-Unreleased notification event controls: workflow definitions now expose Notifications using the versioned service. manage_workflow changes.notifications accepts unique event_type/enabled patches for task_assigned, reminder, escalation, approved, rejected, submitted and comment. These update workflow_notification_settings, the table read by delivery. Omitted events and existing delivery/template metadata are preserved; missing event rows use the delivery default of enabled. Settings apply to the new definition version, leaving existing instances on their original version. Organization and recipient preferences remain additional delivery gates. The new editor removes the ineffective legacy JSON channel/CC/reply-to controls; channel and custom-template management are not newly implemented. Legacy JSON endpoint retirement and full mocked delivery/release acceptance remain open.
+Escalation editor: each step exposes multiple escalation stages with a deadline, named role/person, previous-assignee notification, pending-task reassignment and priority controls. Add/remove stages through the versioned save; clearing the list removes only the new version's rules. The separate simple overdue reminder applies only when no configured escalation rules exist.
 
-Unreleased notification endpoint migration: updateNotificationSettings now refuses legacy JSON writes and directs admins to reviseConfiguration with the viewed revision and notifications event patches. Non-admin and foreign-definition calls remain denied. Existing historical JSON is retained as evidence rather than rewritten. Mocked sender tests verify all seven event gates (including reminder/comment/rejected) stop email/log creation when disabled, with enabled sender controls retained. No real email was sent by these tests.
+Workflow notification configuration requires owner/admin authority.
 
-### Transaction-type field configuration authority (local, unreleased)
+Notification event controls: workflow definitions expose Notifications using the versioned service. manage_workflow changes.notifications accepts unique event_type/enabled patches for task_assigned, reminder, escalation, approved, rejected, submitted and comment. These update workflow_notification_settings, the table read by delivery. Omitted events and existing delivery/template metadata are preserved; missing event rows use the delivery default of enabled. Settings apply to the new definition version, leaving existing instances on their original version. Organization and recipient preferences remain additional delivery gates. The editor has no channel, CC or reply-to controls; channel and custom-template management are not part of these settings.
 
-Editing per-transaction-type workflow header and line requirements requires owner/admin membership in the definition’s organization. Ordinary members, accountants and viewers cannot change these requirements; foreign-organization definitions are refused even for admins. The editor now uses the viewed revision to create a successor; direct updateTransactionTypeFields writes refuse. Existing workflow instances retain their definition. These changes are local and unreleased.
+updateNotificationSettings refuses legacy JSON writes and directs admins to reviseConfiguration with the viewed revision and notifications event patches. Non-admin and foreign-definition calls are denied. Existing historical JSON is retained as evidence rather than rewritten. Disabling any of the seven events (including reminder, comment and rejected) stops its email and log creation.
 
-### Versioned activation lifecycle (local, unreleased)
+### Transaction-type field configuration authority
+
+Editing per-transaction-type workflow header and line requirements requires owner/admin membership in the definition’s organization. Ordinary members, accountants and viewers cannot change these requirements; foreign-organization definitions are refused even for admins. The editor uses the viewed revision to create a successor; direct updateTransactionTypeFields writes refuse. Existing workflow instances retain their definition.
+
+### Versioned activation lifecycle
 
 `manage_workflow(action="activate" | "deactivate", definition_id=..., expected_revision=...)`
 requires a fresh `get` revision, current owner/admin membership, and no `changes`
@@ -1254,11 +1245,11 @@ an audit failure rolls back the entire transition. Activation does not approve,
 execute, or submit a payment. The Admin definition-page toggle uses this same contract, stays disabled until
 an authorized snapshot loads, and displays conflicts without automatically
 retrying with a fresh revision. Activation opens the new definition; deactivation
-updates the saved snapshot. Two-connection local tests verify that competing activations, deactivations,
+updates the saved snapshot. Competing activations, deactivations,
 and revision-versus-deactivation requests serialize: one succeeds and the stale
-request conflicts. Draft editing/creation remains open.
+request conflicts.
 
-### Prepare an inactive revision (local, unreleased)
+### Prepare an inactive revision
 
 Use `manage_workflow(action="draft", definition_id=..., expected_revision=...,
 changes=...)` to prepare an inactive successor from an active or inactive
@@ -1278,10 +1269,10 @@ activate the finished draft. These are separate audited operations, not an atomi
 policy switch; until activation succeeds, new submissions may lack an active
 workflow. Existing submissions keep their original definitions. Prefer the
 existing atomic `update` action for an immediate change to an active policy.
-Creating a definition from scratch remains open; this draft action copies an
-existing supported contract. Use publish below for atomic prepared-draft replacement.
+This draft action copies an existing
+configuration; to start a workflow from scratch, use `create` (below). Use publish below for atomic prepared-draft replacement.
 
-### Publish a prepared draft (local, unreleased)
+### Publish a prepared draft
 
 Prefer `manage_workflow(action="publish", definition_id=<draft>,
 expected_revision=<viewed draft revision>, active_definition_id=<active>,
@@ -1296,16 +1287,15 @@ existing workflow instances retain their original definitions. This publishes
 configuration only and never makes a task decision.
 
 The Admin `publishConfiguration` gateway uses the same contract and server actor.
-Local two-connection tests verify that simultaneous publication, publication
+Simultaneous publication, publication
 versus draft editing, and competing draft saves serialize without duplicate
 versions; the stale request conflicts. The Admin definition page offers **Publish draft** when a same-operation active
 version is available. It displays the active name/version being replaced and
 sends both viewed revisions. A conflict stays visible without an automatic retry.
 Without an active version, use the activation switch. Controls require an
 authorized configuration snapshot and disable while a save is pending.
-Creating a workflow from scratch also remains open.
 
-### Discard a draft (local, unreleased)
+### Discard a draft
 
 `discard` sets an open draft aside; it stays in the version history and nothing live changes.
 Call `manage_workflow(action="discard", definition_id=<draft>,
@@ -1320,21 +1310,20 @@ workflow's draft; unlike the other actions it names no new version. A discarded 
 source can be copied to a new draft, and a new workflow's operation can be created
 again.
 
-### Retired direct step and lane writes (local, unreleased)
+### Retired direct step and lane writes
 
 The legacy Admin mutations `updateLaneRules`, `createWorkflowStep`,
 `updateWorkflowStep`, `deleteWorkflowStep`, `reorderWorkflowSteps`, and
-`updateStepLaneSkip` now refuse direct writes after checking administrator and
+`updateStepLaneSkip` refuse direct writes after checking administrator and
 organization access. Use the current versioned editors or `reviseConfiguration`
 with a viewed revision (Cowork: `manage_workflow` update/draft). Step changes use
 the complete desired steps list; lanes use the supported lane-rule patch.
 Removing a step omits it only from the successor, preserving historical tasks.
 This prevents old clients from bypassing conflict checks and history preservation.
-Related-entity and transaction-type field writes now use versioned saves. Entity
-override and other remaining legacy writes still need migration; do not claim
-every authoring surface is versioned yet.
+Related-entity, transaction-type field, notification, submitter-review and
+entity-override writes also refuse direct edits and use versioned saves.
 
-### Versioned related collection rules (local, unreleased)
+### Versioned related collection rules
 
 `manage_workflow` update/draft accepts `changes.related_rules` with a `rules`
 map of collection names. Each collection patch supports nonnegative integer
@@ -1350,10 +1339,9 @@ preserves omitted metadata; switching a dimension collection to optional clears
 its required dimension types. The specialized transaction/dimension-policy editor also saves through this
 versioned path. The workflow settings matrix also uses viewed revisions. Transaction rows link
 to their per-type editor rather than writing a global dimension requirement.
-The old updateRelatedEntityRules endpoint now refuses direct writes. Runtime dimension validation and full editor parity remain to
-verify before release.
+The old updateRelatedEntityRules endpoint refuses direct writes.
 
-### Versioned dimension policy authoring (local, unreleased)
+### Versioned dimension policy authoring
 
 `changes.related_rules.dimension_policy` explicitly replaces the selected
 scope’s dimension policy; omit it to preserve the policy. Use `rules={}` when
@@ -1365,8 +1353,7 @@ business-line roles retain runtime semantics. Unsupported versions, duplicate
 sources, invalid flags and unavailable types refuse before a revision is saved.
 An empty dimensions array explicitly clears policy entries. Collection rules
 and other transaction scopes remain unchanged. The admin dashboard does not edit the policy (it keeps the stored one on
-every save); set it through `manage_workflow` with this versioned contract, or an entity override. Interaction with
-dimension-write concurrency still needs acceptance testing.
+every save); set it through `manage_workflow` with this versioned contract, or an entity override.
 
 Related collection deletion is explicit: pass `remove_collections` alongside
 `rules`. Omitted collections stay unchanged; removal affects only the new
@@ -1381,7 +1368,7 @@ required type preserves the collection minimum; change that separately in the
 related-entity editor when the collection itself should be optional. Saving
 opens the new workflow version and preserves historical configurations.
 
-### Versioned transaction field requirements (local, unreleased)
+### Versioned transaction field requirements
 
 `manage_workflow` update/draft accepts `changes.transaction_fields` with an
 existing configured `transaction_type_code` and `header_fields`, `line_fields`,
@@ -1397,47 +1384,39 @@ requirements remain additive: a per-type optional setting cannot weaken them.
 
 The Admin editor reads the same revision snapshot, saves only the edited scope,
 shows conflicts without retrying and opens the successor. Changing transaction
-type discards the unsaved field editor. Initial creation of a missing type scope
-is not supported by this contract. Required-field presence is verified against
-the existing runtime checker; this does not certify all importer or field-type
-validation paths. No existing transaction or task is changed by a field edit.
+type discards the unsaved field editor. A missing type section can be created
+for an active registered system transaction type (see missing transaction
+sections below). No existing transaction or task is changed by a field edit.
 
 
-### Entity override gap and read isolation (local review, unreleased fix)
+### Entity overrides and read isolation
 
 The entity override tab stores lane, step, field, related-entity and approver
-configuration, but legacy unmarked definitions do not load these records.
-Do not rely on them for routing or validation. A disposable definition-selection
-characterization confirms that a stored entity payload requirement is ignored;
-this is evidence of a missing feature, not acceptance of the behavior.
+configuration. Only versions saved through the versioned override contract below
+apply these records; legacy unmarked definitions do not load them, so do not rely
+on legacy override rows for routing or validation.
 
-The Admin override reader now checks access to the parent definition before
-fetching override contents. Ordinary users and organization admins cannot read
-another organization's overrides; existing platform-admin policy is unchanged.
-Own-organization configuration read access remains available. Versioned override
-authoring, entity ownership validation and runtime application are still open;
-they must be implemented and tested together before claiming working parity.
+The Admin override reader checks access to the parent definition before fetching
+override contents. Ordinary users and organization admins cannot read another
+organization's overrides; existing platform-admin policy is unchanged.
+Own-organization configuration read access remains available.
 
 
-Entity policy integration status (local, unreleased): a shared typed composition
-module now covers all five stored categories, with organization-bound entity
-loading and successor step-reference remapping. Payload requirements are
-additive to definition-wide requirements. Payment approval composition refuses
-policies without an assigned human review step in every lane. The helpers now support draft authoring and explicitly versioned definition
-selection as described below. The publication acceptance checkpoint below supersedes
-the earlier integration block. Live approver eligibility and actor entity access must still
-be checked by integrated callers; helper tests alone do not establish parity.
+Entity policy composition: a shared typed composition module covers all five
+stored categories, with organization-bound entity loading and successor
+step-reference remapping. Payload requirements are additive to definition-wide
+requirements. Payment approval composition refuses policies without an assigned
+human review step in every lane.
 
 
-Versioned entity override drafts (local, unreleased): `manage_workflow` draft
+Versioned entity override drafts: `manage_workflow` draft
 accepts `changes.entity_overrides`, the complete desired list of
 `{legal_entity_id, override_type, override_config}` records. Omit the list to
 preserve it; `[]` explicitly removes overrides from the successor only. Entity
 and type pairs must be unique. Target entities must be active in the organization
 and within the administrator's entity access. Explicit user/employee approvers
 must be active human members with access to that entity; referenced roles and
-dimension types must exist. Runtime role/dimension resolution still needs its
-own live eligibility checks.
+dimension types must exist.
 
 Configurations use the typed lane and payload contracts; step_skip takes
 `{step_ids:[...]}`; approvers takes `{steps:[{step_id,approver_rules:[...]}]}`;
@@ -1445,19 +1424,18 @@ related_entity_rules takes the related collection patch contract. Step IDs must
 refer to retained source steps and are remapped into the successor. Create a
 new step in a draft first, then reference its returned ID in a subsequent draft.
 Payment composition preserves assigned human review in every lane. Publication
-and activation now revalidate each composed entity policy after cloning, including
+and activation revalidate each composed entity policy after cloning, including
 remapped step references and live authoring checks. Saving a draft does not activate it.
-The Admin override form now uses this draft contract. It reads the authorized
+The Admin override form uses this draft contract. It reads the authorized
 revision snapshot, supports adding/editing/removing a selected entity/type pair,
 preserves other pairs, and opens the successor after saving. Conflicts remain
 visible in the dialog with unsaved input retained; no automatic retry occurs.
-Direct upsertEntityOverride/deleteEntityOverride writes now refuse after
+Direct upsertEntityOverride/deleteEntityOverride writes refuse after
 organization and administrator checks. Read-only users can still view authorized
-configuration but cannot change it. These editor changes do not enable runtime
-overrides or remove the publication guard.
+configuration but cannot change it.
 
 
-Versioned runtime selection checkpoint (local, unreleased): validated successor
+Runtime selection: validated successor
 versions with overrides receive the internal `entity_override_policy_version=1`
 marker. The engine applies their entity-specific requirements, lane rules and
 step/approver settings when selecting the definition, and passes composed steps
@@ -1466,14 +1444,8 @@ unmarked records remain inert rather than silently changing historical policy;
 unknown marker versions refuse. Versioned policies require a positive entity ID,
 an active entity in the definition organization and caller entity access.
 
-Local tests verify definition selection, required-field validation, lane
-resolution, composed approvers and legacy compatibility without making workflow
-decisions. Full creation/assignment acceptance, corrections, line edits, import
-and guidance parity still require verification. The activation/publication guard
-remains in force until those paths consistently use the same effective policy.
 
-
-Entity-policy correction checkpoint (local, unreleased): payload corrections and
+Corrections under an entity policy: payload corrections and
 pending payment-line synchronization resolve the exact instance definition,
 including when that definition is now inactive. Versioned workflows cannot
 change legal_entity_id through a correction; reject and resubmit to establish a
@@ -1481,28 +1453,19 @@ new entity policy. Required fields, related/dimension settings, lane checks and
 review-step checks use the composed policy. Entity requirements that fail during
 batch synchronization refuse before rewriting the approval payload/hash.
 
-Disposable tests cover both refusal without a rewrite and a valid synchronization
-that leaves the batch/workflow pending with no review decision. This is not a
-payment execution test. Import/schema guidance, complete creation/assignment
-acceptance was extended in the publication checkpoint below; broader live checks remain open.
 
-
-Submission requirements checkpoint (local, unreleased): submit now selects its
+Submission requirements: submit selects its
 required fields through the same workflow routing and versioned entity-policy
-composition used by creation, with the caller context. It no longer takes the
+composition used by creation, with the caller context. It does not take the
 newest active definition regardless of matching conditions. A failed policy
 lookup/composition refuses submission with error_stage=workflow_requirements;
 static validation does not replace configured requirements. Retry after the
 configuration or availability problem is resolved. No workflow is started by
 that failed check, and internal database details are not returned to the caller.
 
-Payload-less import requirement loaders still use their legacy selection/cache;
-transaction imports and schema guidance require separate alignment. This change
-does not certify those paths or lift the entity-policy publication guard.
 
-
-Vendor import policy checkpoint (local, unreleased): the base required-field
-checker used by VendorImporter now selects workflow requirements separately for
+Vendor import requirements: the base required-field
+checker used by VendorImporter selects workflow requirements separately for
 each record, including its entity and routing fields. It enforces header fields
 and identifier alternatives; it does not reuse the first row's requirements.
 Numeric text entity IDs are normalized for policy lookup in line with vendor
@@ -1511,49 +1474,37 @@ refuses the record. Failed lookup/composition returns a workflow_requirements ro
 error before transformation or persistence; fixing the policy allows a later
 retry. There is no fallback to an unconstrained policy after a lookup failure.
 
-This is not certification of every importer: transaction imports retain a
-separate requirement/line-validation path, and other subclasses must explicitly
-opt in to the base checker. Per-record lookup adds database work; import latency
-has not been certified. Later transaction/assignment and publication acceptance
-checkpoints supersede the earlier publication block.
+Transaction imports use their own requirement and line-validation path (below),
+and other importers apply the base checker only where they opt in. Per-record
+lookup adds database work to each imported record.
 
 
-Transaction import requirement checkpoint (local, unreleased): validation now
+Transaction import requirements: validation
 selects transaction.post for each record's routing payload and entity, with the
 caller context. The cached first definition no longer determines required fields
 or the type enum. Generic and per-type header/line requirements are combined;
 missing line fields include their line index in the row error. Numeric zero is a
 present value in structured lines. Identifier aliases and cached account/item/tax
 resolution remain available without creating parties during this policy check.
-Fiscal period remains executor-resolved; configured metadata is no longer
+Fiscal period remains executor-resolved; configured metadata is not
 silently exempted. A failed policy check or no matching definition refuses the
 record instead of validating it as unconstrained.
 
-The initial workflow cache remains for compatibility with reference loading,
-but it does not authorize the record. Remaining acceptance includes full
-normalization/executor parity (defaults, dynamically resolved identifiers and
-custom fields), mixed-entity reference caches, schema guidance and performance.
-These local tests do not establish full import/approval certification or permit
-publication of entity overrides yet.
+The initial workflow cache is kept for reference loading, but it does not
+authorize the record.
 
 
-Transaction normalization checkpoint (local, unreleased): required-field checks
-now preview the same transformation used by posting, with party creation
+Transaction normalization: required-field checks
+preview the same transformation used by posting, with party creation
 explicitly disabled. This includes currency/date defaults, resolved existing
 identifiers, flat/structured lines and dimensions. The preview copies the source
 record, so validation does not mutate its dimensions or other fields. A required
-custom field that transformation drops now refuses before any auto-created party
+custom field that transformation drops refuses before any auto-created party
 or transaction. Defaults that satisfy requirements are accepted consistently.
 
-This does not certify new-party routing: the existing vendor/customer creation
-helpers use a separate committed connection. New IDs may affect conditions after
-the preview, and those side effects need explicit atomicity/routing acceptance.
-This remains open together with mixed-entity reference caches and schema guidance;
-the later atomic import and publication checkpoints supersede this earlier block.
 
-
-Import party atomicity checkpoint (local, unreleased): missing vendors/customers
-are now created using the import record's connection, which is also passed to
+Import party atomicity: missing vendors/customers
+are created using the import record's connection, which is also passed to
 the transaction executor. Party creation and entity linkage roll back with a
 failed record or group. Creation validates active organization/entity ownership
 and caller entity scope, serializes same-name creation within that scope, and
@@ -1563,13 +1514,10 @@ caches; later records re-query, avoiding references to rolled-back IDs.
 After transformation, transaction imports reselect workflow requirements using
 actual resolved IDs before duplicate lookup, GL backfill or posting. A new ID
 that changes routing must satisfy the newly selected requirements and type enum,
-or the record rolls back. Tests cover refusal, rollback and retry without posting
-financial transactions. This supersedes the separate-connection finding above;
-full posting/concurrency acceptance, mixed-entity reference-cache isolation,
-schema guidance and publication gates remain open.
+or the record rolls back.
 
 
-Mixed-entity import checkpoint (local, unreleased): transaction import validates
+Mixed-entity imports: transaction import validates
 an active in-organization entity and caller scope before loading reference data.
 Each entity has a separate importer cache for parties, transaction settings,
 dimensions and reusable executors. Alternating records cannot reuse the first
@@ -1578,12 +1526,8 @@ preserved across these entity-specific importers. Invalid IDs (including boolean
 IDs), excluded entities and unavailable entities refuse; numeric text IDs are
 normalized. Omitted row entity uses the configured import entity.
 
-Synthetic tests verify alternating-entity resolution and denial before loading;
-existing disposable rollback/requirement tests continue to pass. Broader live
-isolation, full posting and performance remain to be accepted before release.
 
-
-Workflow schema context (local, unreleased): call
+Workflow schema context: call
 `get_submissions(action="schema", object_type="transaction", operation="post", payload='{"legal_entity_id":12,"transaction_type_code":"AP_INVOICE"}')`
 with the intended entity, transaction type and other routing fields. The schema
 uses engine selection and the caller's entity scope, then combines the validator
@@ -1597,10 +1541,10 @@ Without payload, the response is generic guidance marked
 context instead of returning misleading base-only requirements. An excluded
 entity refuses. Validator-only fallback remains discoverable and explicitly says
 no matching workflow was resolved. Recheck with complete payload before submit;
-this guidance does not approve, execute or bypass publication restrictions.
+this guidance does not approve or execute anything.
 
 
-Pending-task assignment checkpoint (local, unreleased): task creation now
+Pending-task assignment: task creation
 resolves approver rules from the instance's saved effective entity policy, rather
 than re-reading only the base step's approver columns. Conditional explicit
 targets keep their existing precedence. The same resolution is used when the
@@ -1612,40 +1556,35 @@ with live workflow read access for the entity/domain. Review/approval/edit-revie
 steps additionally require mutation authority. Missing access refuses task
 creation and rolls back workflow creation; it does not silently pick another
 user. Existing owner/admin selection and explicit submitter rules remain subject
-to these checks. Disposable end-to-end tests create a pending review only, with
-email and completion calls prevented. Later pending-step tests verify saved
-policy and access revoked before assignment. Assignment-time access locking is
-covered below. No approval or execution is implied.
+to these checks. Assignment approves or executes nothing.
 
 
-Saved-step ownership safeguard (local, unreleased): assignment refuses a pending
+Saved-step ownership safeguard: assignment refuses a pending
 step linked to any definition other than the instance’s saved definition, even
 within the same organization. It does not substitute the foreign approver, skip
 the malformed step or complete the workflow. Investigate and repair the stored
 link through an authorized recovery process; retrying cannot repair it.
 
 
-Assignment authority locking (local, unreleased): task creation holds the current
+Assignment authority locking: task creation holds the current
 user, membership, role grants, role definitions and permission rows stable until
 its transaction ends. A competing restriction or revocation waits; a committed
 revocation is seen by the next check. This does not grant continuing access after
 commit or replace the access checks when a task is read or decided. No task is
-approved by assignment. Deferred notification access and all other authorization
-writers still need separate review; this is not full concurrency certification.
+approved by assignment.
 
 
-Deferred task-recipient checks (local, unreleased): before sending an assignment
+Deferred task-recipient checks: before sending an assignment
 email, delivery rechecks that the task and workflow are pending, the saved step
 belongs to the definition, and the named assignee is still assigned. Recipients
 must be active human members with current entity/domain read access and mutation
 authority for review steps. Role copies use the current stored task role, active
 unexpired grants in the same organization, and a separate access check for every
 recipient. Revoked or excluded recipients are skipped. Checks precede delivery;
-they cannot retract email already accepted by the provider. Other notification
-types and provider-side access checks remain separate review work.
+they cannot retract email already accepted by the provider.
 
 
-PR289 missing transaction sections (unreleased): transaction_fields and
+Missing transaction sections: transaction_fields and
 transaction-scoped related_rules can create a missing section for an active
 registered system transaction type. The type is checked under a shared lock.
 Unknown/inactive types refuse before a successor is created. Generic requirements,
@@ -1654,33 +1593,31 @@ Creating a section neither enables transaction posting nor expands the workflow'
 accepted transaction-type enum. Draft/publication and reviewer safeguards still apply.
 
 
-New-definition service checkpoint (local, unreleased): an internal creation
-service can build an inactive root workflow for a supported executor operation,
-using the unique active system-template operation contract for permission and
-required-field metadata. Administrators provide review configuration; they cannot
-provide authority fields. Existing tenant operations return a conflict directing
-the editor to the draft lifecycle. Creation is audited and rolls back on invalid
-configuration. The `manage_workflow(action="create", creation=...)` tool action
-and Admin `createConfiguration` gateway now expose this service. Supply name,
-object_type, operation and configuration (including assigned human-review steps),
-without definition IDs, revisions or changes. The returned ID/revision identifies
-an inactive draft; creation never activates or executes it. The Admin workflow list now includes New workflow for administrators. Choose an
-available action and name; the form creates an inactive draft with an administrator
-approval step. Existing operation families must use Copy to draft. Review the
-returned draft before activating it. Isolated creation/isolation/concurrency tests pass; this feature remains unreleased
-until the final PR checks, review and deployment are complete.
+Creating a workflow: `manage_workflow(action="create", creation=...)` and the
+Admin `createConfiguration` gateway build an inactive root workflow for a
+supported executor operation, using the unique active system-template operation
+contract for permission and required-field metadata. Supply name, object_type,
+operation and configuration (including assigned human-review steps), without
+definition IDs, revisions or changes; authority fields cannot be supplied. An
+operation the organization already has returns a conflict directing you to the
+draft lifecycle (Copy to draft). Creation is audited and rolls back on invalid
+configuration. The returned ID/revision identifies an inactive draft; creation
+never activates or executes it. In Admin, administrators use New workflow on the
+workflow list: choose an available action and name, and the form creates an
+inactive draft with an administrator approval step. Review the returned draft
+before activating it.
 
 
-PR289 settings migration (unreleased): notification matrix toggles now save an
+Settings matrix: notification matrix toggles save an
 event patch against the displayed revision and open the returned workflow version.
 Conflicts remain visible without optimistic success or automatic retry. Legacy
 updateNotificationGate, updatePayloadFields and updateRequiredDimensions refuse
 direct changes; use reviseConfiguration with notifications, payload_fields or
 related_rules dimension policies. Existing versioned field/dimension editors remain
-the supported UI. Single submitter-review settings now use versioned edits; bulk settings now use the atomic displayed-revision contract described below.
+the supported UI. Single submitter-review settings use versioned edits; bulk settings use the atomic displayed-revision contract described below.
 
 
-PR289 submitter review (unreleased): reviseConfiguration/manage_workflow changes
+Submitter review: reviseConfiguration/manage_workflow changes
 accept submitter_review as a boolean. It adds a submitter change-request step if
 absent, or removes existing submitter change-request steps, in a successor version.
 Other steps and children remain intact; references to removed steps refuse. Do not
@@ -1689,44 +1626,36 @@ uses its displayed revision; conflicts remain visible. Legacy toggleSubmitterRev
 refuses direct writes. Bulk settings use the atomic displayed-revision contract described below.
 
 
-Bulk submitter-review service (unreleased): the shared
-service accepts 1–100 unique definition IDs with their displayed revisions and a
-boolean. Only one version per operation family is allowed. It takes family locks
-in canonical order and validates all snapshots before making successor versions.
-A stale selection or later validation failure rolls back all versions and audits.
-The unreleased manage_workflow action bulk_submitter_review and Admin
-reviseSubmitterReviewBatch now expose this contract. Supply changes containing
-revisions (definition_id and expected_revision pairs) and enabled; do not supply
-singular definition/revision or creation arguments. The settings bulk controls load and display fixed snapshots before saving, as
-described below.
+Bulk submitter review: the manage_workflow action bulk_submitter_review and Admin
+reviseSubmitterReviewBatch accept 1–100 unique definition IDs with their displayed
+revisions and a boolean. Only one version per operation family is allowed. The
+service takes family locks in canonical order and validates all snapshots before
+making successor versions. A stale selection or later validation failure rolls
+back all versions and audits. Supply changes containing revisions (definition_id
+and expected_revision pairs) and enabled; do not supply singular
+definition/revision or creation arguments.
 
 
-PR289 bulk settings UI (unreleased): Bulk submitter review lets an administrator
+Bulk settings page: Bulk submitter review lets an administrator
 select up to 100 active workflows, inspect loaded version/review state and enable
 or disable submitter review in one atomic save. Each displayed revision is fixed
 while editing; conflicts stay visible without retry. Successful saves link to the
 new versions and disable duplicate submission. Historical/inactive versions are
 edited individually, not included in bulk changes. The legacy
-bulkUpdateSubmitterReview route now refuses direct writes. This supersedes earlier
-bulk-UI-pending checkpoints; final release acceptance remains open.
+bulkUpdateSubmitterReview route refuses direct writes.
 
 
-Entity publication acceptance (unreleased PR289): 256 combined isolated tests pass
-for configuration, all five entity policy categories, actual policy selection,
-saved-definition edits, imports, task assignment/revocation, notification recipients
-and escalation. Publication now clones/revalidates overrides and checks every
-composed entity policy, including payment human review per lane. An integration
-test publishes and resolves the resulting policy while existing instances retain
-their original definition. Unsupported policy versions refuse. This is not
-production or performance certification; final review/CI/deployment remains open.
+Entity policy publication: publication clones and revalidates overrides and checks
+every composed entity policy, including payment human review per lane. Existing
+instances keep their original definition. Unsupported policy versions refuse.
 
-PR289 draft navigation (unreleased): after copying or publishing, the returned
+Draft navigation: after copying or publishing, the returned
 workflow version can be edited without reloading the page. The duplicate-save
 guard applies to the submitted version and resets on navigation to a different
 definition; stale-version conflicts still require explicit review, not automatic retry.
 
 
-### Unreleased QA clarification: team membership and login history
+### Team membership and login history
 
 The team table labels organization access as **Membership** to distinguish it
 from assigned accounting permission roles. An accounting Administrator role alone
@@ -1735,17 +1664,16 @@ is shown as **Not recorded**, not **Never**; it is not proof that the user has n
 signed in. This is a display correction, not new login telemetry or an access change.
 
 
-### Admin invalid-session recovery (QA branch; deployment unverified)
+### Admin invalid-session recovery
 
-The Admin middleware's existing JWE-error recovery now expires both current
+The Admin middleware's JWE-error recovery expires both current
 `__session` and legacy `appSession` cookies, including numeric chunks, at the
 configured cookie path/domain before redirecting to login. It leaves unrelated
 cookies alone and logs no SDK error text or cookie values. This does not change
-MCP authentication, grants or identity-provider logout. The historical hosted
-logout failure remains open; do not claim it resolved from isolated tests.
+MCP authentication, grants or identity-provider logout.
 
 
-### Single-notification read scope (QA branch; deployment unverified)
+### Single-notification read scope
 
 Marking a notification read checks both its recipient and the currently selected
 company, matching the feed and mark-all-read scope. A row for another company or
@@ -1779,9 +1707,9 @@ or compliance coverage; country setup and skill availability are separate.
 Configuration → Entities offers **Open entity setup guide** when the list is empty. This opens `/entities/create`, which describes assistant-led first-entity onboarding and additional-entity setup. It is guidance only and does not grant onboarding authority or create records.
 
 
-### Workflow AP/AR read parity (QA branch; deployment unverified)
+### Workflow AP/AR read parity
 
-Workflow details and collections using the shared payload-read policy now require
+Workflow details and collections using the shared payload-read policy require
 `ap:read` for bill, expense_report, card_transaction and purchase_order, and
 `ar:read` for customer_invoice and sales_order. The mapping is shared with agent
 request readers. A payroll read grant does not bypass AP/AR checks; domain
@@ -1790,8 +1718,8 @@ payroll-payload and entity checks remain additional requirements.
 
 This applies to shared-policy workflow detail reads, activity/run collections and
 linked notifications. Filtered runs are reported as hidden; the explanation refers to current domain or entity permissions because either can restrict a row. Configurable workflow
-write/approval grants do not substitute for these read grants. Other object families,
-unknown provenance and hosted acceptance remain open; no new read policy is inferred
+write/approval grants do not substitute for these read grants. Other object families
+and unknown provenance are not classified; no read policy is inferred
 from arbitrary free text or custom workflow write permissions.
 
 
@@ -1802,9 +1730,9 @@ payload entity hint is withheld for restricted readers. Agent-request null-entit
 semantics remain separate. This is read authorization, not a repair of old payloads.
 
 
-### Workflow entity ceilings (QA branch; deployment unverified)
+### Workflow entity ceilings
 
-Shared workflow payload/detail and collection readers now enforce the current
+Shared workflow payload/detail and collection readers enforce the current
 membership/role entity ceiling independently of domain grants, including wildcard
 grants. Restricted readers need a valid matching payload entity or a stored payment
 batch whose entity is allowed and does not contradict a supplied hint. Missing,
@@ -1818,14 +1746,14 @@ unrestricted members too). Unrestricted access retains the existing organization
 rules. A restricted caller's cross-company payload read is denied rather than
 reusing entity IDs across tenants. Domain and payroll checks still apply separately.
 
-Family activity/run summaries now check for hidden rows in any object family;
+Family activity/run summaries check for hidden rows in any object family;
 entity restrictions can hide master-data workflows too. The explanation says
 **Some runs are hidden by your current domain or entity permissions**, avoiding
 an incorrect claim about which grant is missing. No role assignments, workflow
 approvals, old payloads or accounting data are changed.
 
 
-### Definition summary visibility (QA branch; deployment unverified)
+### Definition summary visibility
 
 Definition lists, definition details and family lists calculate run counts and the
 latest submission from runs the caller may read. Domain and entity filters apply
@@ -1838,7 +1766,7 @@ payroll provenance; a restricted caller's entity IDs are never reused in another
 tenant. These are read-only changes; approvals and accounting records are unchanged.
 
 
-### Analytics run visibility (QA branch; deployment unverified)
+### Analytics run visibility
 
 Workflow dashboard metrics, analytics summaries, leaderboards and bottleneck
 statistics use the same run-read restrictions as workflow details. The filters
@@ -1854,7 +1782,7 @@ than crashing the entire report. Analytics describe visible runs, not necessaril
 all company activity. These changes do not edit old payloads or approval records.
 
 
-### Run lists, activity and audit export (QA branch; deployment unverified)
+### Run lists, activity and audit export
 
 Workflow instance rows, their total count and recent activity require the run and
 its definition to belong to the same organization. The shared domain/entity policy
@@ -1865,11 +1793,10 @@ before pagination or activity limits, so excluded rows do not consume page slots
 The analytics audit CSV exports only the current returned page and its selected
 summary fields, not all rows indicated by the total and not raw workflow payloads.
 An empty returned page produces no download. Other workflow CSVs use their existing
-returned summary/list data; this observation does not certify hosted revocation,
-browser caching or all export surfaces. No approval or data-repair writes occur.
+returned summary/list data. No approval or data-repair writes occur.
 
 
-### Stored transaction workflow reads (QA branch; deployment unverified)
+### Stored transaction workflow reads
 
 Admin workflow readers resolve an existing transaction by its stored ID **and**
 entity. A payload's transaction-type hint cannot replace the stored authority.
@@ -1884,14 +1811,13 @@ unrestricted owners; wildcard owners retain domain access to existing records.
 No transaction types, grants, payroll data or accounting records are changed.
 This bounded transaction-source contract also applies to MCP workflow detail
 and collection reads: stored types use the same registry and bounded reversal
-source chain. Other business-object families, malformed/legacy provenance and
-hosted identity acceptance remain open; this is not blanket workflow parity.
+source chain. Other business-object families and malformed/legacy provenance are outside
+this contract.
 
 For MCP readers restricted by membership or a host task entity, stored payment-batch
 references may omit the entity hint, but a supplied hint must match the stored
 batch entity before list/count visibility. Conflicting hints are rejected, matching
-the existing direct-read check. Unrestricted and malformed legacy-shape acceptance
-remains separate; this check does not certify those cases.
+the existing direct-read check.
 
 Admin and MCP workflow collection reads require an object-shaped payload and a nonempty
 object type before counting or pagination, including for wildcard owners. This
@@ -1899,7 +1825,7 @@ matches direct-read validation. Payment batches with non-null, non-array `lines`
 require payroll-read authority because their content cannot be classified safely;
 false, zero and empty-string containers are not treated as absent. Missing/null
 lines and arrays retain existing provenance checks. No stored payload is repaired
-or deleted. Other malformed references and wider object-domain parity remain open.
+or deleted.
 
 Admin and MCP workflow readers validate supplied payment-batch and payroll-run
 references before applying broad permission grants. A batch must exist in the
@@ -1910,7 +1836,7 @@ notifications. Proposed workflows without stored references retain their existin
 domain/entity checks. MCP batch-domain requirements remain unchanged; payroll
 read alone is not a substitute for them. No history or accounting data is repaired.
 
-Assignment and configured escalation eligibility now check the specific workflow
+Assignment and configured escalation eligibility check the specific workflow
 through the shared detail-read policy. They first require matching instance and
 definition organizations, then enforce current domain, membership-entity and host
 task scope. Only that object’s stored references are resolved; organization-level
@@ -1918,34 +1844,32 @@ invitations do not depend on unrelated accounting tables. Existing mutation and
 self-review checks remain in place. Collection reads still filter in SQL before
 pagination/counting; this change does not bypass their policy.
 
-On the QA branch, payment-batch workflow/request reads require at least one of
+Payment-batch workflow/request reads require at least one of
 `payments:read`, `ap:read`, or `accounting:read` (or matching broad authority).
 Salary batches additionally require `payroll:read`; payroll, AR, audit or ordinary
 master-data read alone does not grant batch access. Request source tables,
 request/response object types and explicit batch-ID metadata all retain this
 requirement, including thread summaries and linked notifications. Entity limits
 remain independent. This matches the existing MCP batch registry and Admin
-attachment policy; it does not add grants or authorize a payment. Direct Admin
-payment-screen reads and broader legacy/provenance acceptance remain under audit.
+attachment policy; it does not add grants or authorize a payment.
 
 
-On the QA branch, notification links to `/agents/sessions/<uuid>` must resolve
+Notification links to `/agents/sessions/<uuid>` must resolve
 to a readable agent instance in the notification organization. The feed and
 both unread counts apply the existing execution domain/provenance policy and
 the caller's entity scope before pagination or counting. Missing, malformed,
 foreign-organization and excluded-entity session references are withheld; a
 readable session link cannot override a forbidden task/instance reference on
 the same notification. Existing recipient and admin-alert gates remain in place.
-Unlinked alerts, unknown routes and free-text provenance are not newly certified;
-this change does not retract previously delivered email.
+Unlinked alerts, unknown routes and free-text provenance are not classified, and
+email already delivered is not retracted.
 
 
-QA branch execution-read hardening: an agent's linked workflow definition must
+Execution reads: an agent's linked workflow definition must
 belong to the same organization as its workflow instance. A missing or mismatched
 definition makes the execution unreadable in both Admin and MCP; saga phases and
 linked session notifications inherit that check. Existing domain, entity and
-workflow payload checks still apply. This is verified with synthetic SQL parity
-for lists, counts and pages, not hosted-session acceptance.
+workflow payload checks still apply.
 
 
 ### Pinned OAuth organization refusal
@@ -1956,8 +1880,7 @@ membership in that organization. Missing membership returns HTTP 403 with
 new-user provisioning. Access to a different organization does not change the
 selected company. Check the connected account or ask an administrator to restore
 access; do not remove the organization selection merely to retry a company task.
-Unpinned first-login provisioning remains available. This local signed-token
-regression does not certify hosted OAuth reconnect or provider revocation.
+Unpinned first-login provisioning remains available.
 
 
 ### MCP company creation and initial credentials
@@ -2002,13 +1925,13 @@ returned page. Generic CSV text is guarded against spreadsheet formulas and
 quoted for embedded line breaks. MCP read/write contracts are unchanged.
 
 
-### Agent visibility replacement — implementation in progress
+### Agent output visibility
 
-The approved replacement separates agent-output visibility from business-action
-permissions. Role and direct-user grants are additive; owners/admins retain
-organization/entity-scoped defaults. Non-admin users start with no grants.
-Access includes historical and future outputs, including sensitive payroll data,
-but does not authorize payroll records or business actions.
+Agent-output visibility is separate from business-action permissions. Role and
+direct-user grants are additive; owners/admins retain organization/entity-scoped
+defaults. Non-admin users start with no grants. Access includes historical and
+future outputs, including sensitive payroll data, but does not authorize payroll
+records or business actions.
 
 Owners and admins manage these grants on the agent's page, in the **Viewer access** tab
 (after Permissions; AR-1461), over one grant store with audited changes: an entity scope
@@ -2018,16 +1941,12 @@ each person can access. A person who also holds a granted role keeps access afte
 direct grant is removed; the tab shows that access in its Through role column. The
 agents' own service roles (roles held by an agent's no-sign-in user) are not offered and
 `agentAccess.grant` refuses them: no person holds them, so a grant would reach no one; an
-earlier grant to one is listed as having no effect and can be removed. The Roles page
-entry was removed with the old team role routes on 2026-10-30.
-Reader integration shipped with PR403 (production rollout verified 2026-10-20);
-the canonical workflow and permissions plan tracks producer scope, reader parity
-and tests.
+earlier grant to one is listed as having no effect and can be removed.
 
 
-### Assignment and auxiliary readers — unmerged implementation, 2026-10-20
+### Assignment and auxiliary readers
 
-The implementation branch now applies the shared grant/scope check to saga pages,
+The shared grant/scope check applies to saga pages,
 phase counts and child runs. A visible parent does not reveal a child owned by an
 ungranted agent. Phase numbers remain stable action identifiers; hidden dependency
 links are omitted. Event and memory reads use the same grant store. New event and
@@ -2046,7 +1965,4 @@ and attachment permissions remain separate. Generic saga creation by a human
 requires stored owner/admin membership and an explicit `owner_agent_type`; a worker
 uses its authenticated installed agent identity.
 
-These changes are local and unreleased. Classification repair/backfill, deployment,
-production-capacity acceptance and live authenticated browser verification have not
-been performed. See the canonical workflow/permissions plan for measured evidence
-and outstanding acceptance; do not treat this section as rollout confirmation.
+

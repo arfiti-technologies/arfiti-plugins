@@ -1,10 +1,8 @@
 
 
-## Report correctness contract (migration 630)
+## Report correctness contract
 
-The updated application rejects ordinary cancellation of posted history; migration 628 adds a per-entity guard activated only after compatible writers deploy, and migration 630 supplies shared reporting facts; use an explicitly dated reversal. Financial controls reuse reporting eligibility, while structural integrity checks inspect retained journals. Raw balances retain closes; performance excludes closing transfers and the balance sheet exposes unclosed current/prior earnings. Closing-year attribution requires reviewed metadata. No new automatic year-end closing workflow is introduced.
-
-Requires the matching migration/server release; code availability is not deployment evidence.
+The application rejects ordinary cancellation of posted history; use an explicitly dated reversal. A database guard also refuses it for an entity once that guard is enabled for the entity; it is enabled per entity, not everywhere. Reports use shared reporting facts. Financial controls reuse reporting eligibility, while structural integrity checks inspect retained journals. Raw balances retain closes; performance excludes closing transfers and the balance sheet exposes unclosed current/prior earnings. Closing-year attribution requires reviewed metadata. No new automatic year-end closing workflow is introduced.
 
 ## Card purchase policy
 
@@ -1419,7 +1417,7 @@ is not a passing check or a completed close; inspect the failed run and correct
 the producing check before retrying. Check severity and close approval rules are
 unchanged.
 
-### Fiscal-period execution evidence (QA branch)
+### Fiscal-period execution evidence
 
 Execution `pending_refs` and `evidence_refs` recognize `fiscal_period:<id>` and
 `fiscal_period:<entity_id>:<period_name>` as distinct formats. Each must resolve
@@ -1449,7 +1447,7 @@ retry it. Cancel it with `submit(object_type="saga", operation="cancel",
 data=JSON.stringify({saga_id, reason}))`, fix the records with the normal tools,
 and close the month with `fiscal_period.close`, which re-runs every check itself.
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence
 
 Built-in saga orchestration is optional product workflow. External clients remain subject to supported operation authorization and integrity controls. Recompute-at-close, the recorded close basis and the scoped `force` shipped in AR-461 (section above). Inspect actual workflow configuration; a lane name alone does not prove a human approval step exists.
 

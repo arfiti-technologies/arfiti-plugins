@@ -1,4 +1,4 @@
-## Stale review transitions (local, unreleased)
+## Stale review transitions
 
 An ordinary bank-agent review update cannot overwrite a concurrent exclusion or
 completed journal link. Only an unlinked `unmatched`/`needs_review` row in the
@@ -9,17 +9,14 @@ posting success, an exclusion revocation, or permission to retry a posting.
 Statement void/revocation and cross-source identity remain separate controls.
 
 
-## Already-settled missing batch links (candidate operator repair)
+## Already-settled missing batch links
 
 When the invoice is already paid and its existing payment application is intact,
-do not apply it again. The candidate `repair_settled_payment_links` operator service
-repairs only missing batch/statement links and audit receipts, preserving balances,
-applications (including legacy null source consumption), ledger entries and dates.
-It is not deployed or exposed as an agent operation. Different booking dates need
-exact provider/request identity and corroborating stored creation/completion dates.
-Use a reviewed no-change preview and exact fingerprint with explicit scoped approval;
-no normal confirmation, status-sync or ad-hoc write is a substitute. Never bypass
-an adoption refusal or rewrite financial evidence to make it pass.
+do not apply it again. Missing batch/statement links on such a payment are repaired
+only by an operator-only service that is not exposed through any tool or submit
+operation; ask the operator. It changes no balances, applications, ledger entries
+or dates. No normal confirmation, status-sync or ad-hoc write is a substitute.
+Never bypass an adoption refusal or rewrite financial evidence to make it pass.
 
 ## Reserved invoices and existing cash payments
 
@@ -40,8 +37,7 @@ ad-hoc writes. Preserve provider evidence and review each other stale line separ
 
 ## Agent callback and failure evidence
 
-The built-in bank and card pipeline is removed (P-AR-42, November 2026; built, not
-deployed). A managed agent does this work through the public tools and raises a review
+The built-in bank and card pipeline is removed. A managed agent does this work through the public tools and raises a review
 task when it cannot decide; see "How the managed agents work" in agent-management.md.
 The rest of this section describes runs the built-in pipeline left behind.
 
@@ -65,7 +61,7 @@ Legacy payment-pass descriptions below apply to non-card AP/AR behavior. Card ro
 
 # Bank Statements Management
 
-## Plaid bank connection (local, not deployed)
+## Plaid bank connection
 
 The legacy Plaid preview adapter is not registered for
 `manage_connectors` ingestion. Preview does not create bank lines, acknowledge a
@@ -75,10 +71,10 @@ Platform credentials belong in server configuration, never chat. The
 dedicated dashboard uses Link and stores the Item token encrypted. See the
 provider guide.
 
-The local branch also has a shared `bank_statement.sync` operation for complete
-transaction-feed deltas. It goes through `submit` and always requires an active
-organization workflow definition; none are activated for customers by this
-change. All changed accounts need explicit mappings. Pending evidence stays out
+The shared `bank_statement.sync` operation imports complete transaction-feed
+deltas. It goes through `submit` and always requires an active organization
+workflow definition; every organisation has one (`Sync bank transactions`, no
+approval steps, `banking:write`). All changed accounts need explicit mappings. Pending evidence stays out
 of reconciliation; posted lines have no fabricated balances. Updates and removals
 preserve source history; protected, classified, linked or closed-period evidence
 refuses the complete batch. Pending-only records may advance in a closed period
@@ -92,13 +88,11 @@ Plaid's optional **Start importing from** setting filters previously unseen
 transactions by an inclusive date. Choose and save it before first sync; afterward
 it is fixed. Unset includes all available history. Skipped rows do not stall the
 cursor, and known imported rows still receive protected corrections/removals.
-Browser Link/renewal, actual signed Sandbox webhook delivery and imports into a
-disposable database were tested. The local sandbox dashboard and daily/weekly
-scheduler now use this gateway. Outstanding approval workflows block new
-proposals, and revoked schedule-owner access stops imports. Signed public callbacks
-now trigger the same consumer for connections with automatic sync enabled, with
+The dashboard and the daily/weekly scheduler use this gateway. Outstanding
+approval workflows block new proposals, and revoked schedule-owner access stops
+imports. Signed public callbacks trigger the same consumer for connections with automatic sync enabled, with
 durable retry recovery every 60 seconds. Manual mode prevents callback imports.
-Real-bank connections use separate production configuration and bank OAuth; provider approval, deployment and real-bank verification remain pending. The user chooses test or real banks at creation; an existing connection cannot change environment. This is not production enablement. Renewal preserves the Item/cursor; reconnect
+Real-bank connections use separate production configuration and bank OAuth. The user chooses test or real banks at creation; an existing connection cannot change environment. Renewal preserves the Item/cursor; reconnect
 after removal creates a new connector and preserves history. Importing a new feed
 into an account with another feed's history is refused pending explicit cutover.
 
@@ -1555,7 +1549,7 @@ are different facts. Recovery must use the normal posting workflow and retain th
 original ignored event history.
 
 
-## Purchase evidence investigation (September 2026)
+## Purchase evidence investigation
 
 For CARD_EXPENSE-to-bill identity, compare original merchant amount/currency and
 provider purchase-date evidence separately from settlement dates and fees.
@@ -1600,11 +1594,11 @@ before correcting them. The existing schema already permits NULL; no migration.
 on or before it. Matching status is current, not a historical match-event snapshot.
 
 
-### Bank worklist read bindings (QA branch, not deployed)
+### Bank worklist read bindings
 
-> **Retired (AR-1295, November 2026).** The built-in bank review lifecycle is removed: `services/banking/review_*`, `blocks/bank_task.py`, `bank_task_contract.py`, `bank_resolution.py`, their answer routes and the review hooks in the posting executors, the workflow engine and the job scheduler. `agent_request` create refuses a new `review_statement_lines` / `review_card_transactions` task owned by `bank_transaction_processor`, and respond refuses an answer to an existing one: cancel it instead. Existing tasks keep their history and still render. The managed bank agent asks with its own verification tasks. What follows is the record of the retired behaviour.
+> **Retired (AR-1295, November 2026).** The built-in bank review lifecycle is removed: `services/banking/review_*`, `blocks/bank_task.py`, `bank_task_contract.py`, `bank_resolution.py`, their answer routes and the review hooks in the posting executors, the workflow engine and the job scheduler. `agent_request` create refuses a new `review_statement_lines` / `review_card_transactions` task owned by `bank_transaction_processor`, and respond refuses an answer to an existing one: cancel it instead. Existing tasks keep their history and still render. The managed bank agent asks with its own verification tasks. Reads of the existing tasks still apply the checks below.
 
-For `review_statement_lines` and `review_card_transactions`, request reads now
+For `review_statement_lines` and `review_card_transactions`, request reads
 check stored `lines[].id` and `_bank_worklist.rows` keys against the corresponding
 business rows in the request entity. Statement-ID lists must resolve in that
 entity too. Missing, foreign or malformed references withhold the request and
@@ -1616,28 +1610,11 @@ Linked GL/posting transaction IDs use the existing transaction-read policy,
 including stored transaction type and reversal ancestry. A fingerprint is not
 authority and these read checks do not certify freshness, approval or completion.
 The checks do not introduce a new Bank permission or repair historical records.
-Free-text classification remains separate acceptance work; hosted identity and performance acceptance
-remain open.
 
 
-### Bank snapshot parent bindings (QA branch, not deployed)
+### Historical Bank review parent authority
 
-Creating or revalidating a Bank review snapshot requires the statement line and
-its statement to name the same bank account. Card rows must reference a program
-in their entity; explicitly configured funding and card bank accounts must also
-resolve in that entity. Optional account references may remain absent. A broken
-explicit reference is not treated as an unconfigured optional account.
-
-An inconsistent row is refused before a new fingerprint is returned. Investigate
-the source and configuration through authorized workflows; do not retag records,
-change old fingerprints or bypass the refusal to force a retry. This correction
-does not repair historical data or certify the read authority of previously
-stored request narratives. Existing status/dispute and response gates remain.
-
-
-### Historical Bank review parent authority (QA branch, not deployed)
-
-Historical Bank review reads now also validate each row's stored parents. A
+Historical Bank review reads also validate each row's stored parents. A
 statement line must resolve to a statement in the request entity and use that
 statement's bank account; the account must resolve in the same entity. Card
 rows must resolve to a program in the request entity, and every explicit funding
@@ -1647,11 +1624,10 @@ the same account check. Absent optional program accounts remain supported.
 These checks apply before request/thread rows, totals and pages, including
 response metadata. They validate identity and entity authority, not current
 operational eligibility: archived, voided or disputed history is not hidden
-merely because it cannot be executed again. Arbitrary narratives, hosted identity acceptance and representative performance
-remain open. No historical data is repaired by reading it.
+merely because it cannot be executed again. No historical data is repaired by reading it.
 
 
-### Linked re-ask request authority (QA branch, not deployed)
+### Linked re-ask request authority
 
 Admin/MCP stored request reads follow explicit `reask_of_request_id` values in
 request and response metadata. Every reachable request and its thread siblings
@@ -1665,8 +1641,7 @@ when it has no request ID or thread columns.
 This validates stored read authority, not whether a re-ask completed successfully
 or whether free-text narratives are safe. It does not repair references. Use
 authorized source/configuration recovery rather than editing history to force a
-read. Hosted identity, representative performance and arbitrary narrative
-acceptance remain open.
+read.
 
 
 ### Missing loan GL account recovery
@@ -1699,17 +1674,16 @@ with subtype `loan_receivable`; wrong, inactive or foreign source/configuration
 cannot complete the task. A suggested existing account alone is not an executed
 creation receipt; do not create a duplicate merely to obtain completion.
 
-Task creation performs no GL/account mutation. Hosted dispatch, approved account
-creation, callback delivery and subsequent loan posting remain separate acceptance
-steps; the isolated checks do not claim those end-to-end effects occurred.
+Task creation performs no GL/account mutation. Creating the account and posting
+the loan are separate, later steps.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence for excluded bank lines
 
-Excluded bank lines retain the current failing close outcome. Evidence shows each amount, reason/blank reason, GL link, the same posting-bridge verdict used by statement controls, statement finalizability, and signed totals by account/currency. Exclusion leaves an existing GL link intact. A valid bridge is not a declaration that the line is resolved. AR-484 corrects the exclusion operation's SQL parameter typing without changing this close policy.
+Excluded bank lines retain the current failing close outcome. Evidence shows each amount, reason/blank reason, GL link, the same posting-bridge verdict used by statement controls, statement finalizability, and signed totals by account/currency. Exclusion leaves an existing GL link intact. A valid bridge is not a declaration that the line is resolved.
 
 
-### Bank-line refusal evidence (AR-273, local; not deployed)
+### Bank-line refusal evidence
 
 For `bank_statement_line.match`, `unmatch` and `exclude`, a direct or immediately
 executed request can return a confirmed refusal after its own complete database
@@ -1735,9 +1709,9 @@ workflow, organization, operation, entity, line and payload before returning the
 original reason without execution. Missing, malformed or contradictory receipts
 remain unknown. An ordinary failure message or arbitrary refusal flag is not proof.
 
-Country/accountant choices, matching/exclusion policy and close treatment remain
-in their existing configuration. Saga is optional. No historical repair or automatic
-claim reset is introduced.
+Country/accountant choices, matching/exclusion policy and close treatment stay
+in their existing configuration. The saga is optional. Nothing repairs history or
+resets claims automatically.
 
 Intermediate-review integrity: a non-final review assigns the next pending task;
 it does not automatically execute the bank operation. If pending steps exist but
@@ -1764,16 +1738,7 @@ A failed sync may still have a durable run/audit record, and an observation does
 not establish completion of the whole sync. External agents use the same detail
 projection and shared authorization as built-in agents.
 
-## Coverage evidence storage (local prerequisite, not activated)
-
-Migration 753 and a private repository retain immutable, unattested coverage
-snapshots, invalidations and history. This does not accept new coverage declarations,
-change statement statuses, alter GL, switch current readers or make period close
-pass. Existing coverage behavior remains in place. Country/accountant/business
-requirements remain editable policy work in AR-477; full writer adoption remains
-AR-478 work. Do not treat `legacy_migration` provenance as an attestation or proof
-that workers were drained. Final backfill needs a separately reviewed deployment
-controller and verified worker-output manifest; no production adapter exists yet.
+## Bank review notifications and lifecycle execution
 
 Bank review notifications with no configured provider remain deferred, without a provider attempt. Each pending job receives its unavailable reason independently. If a stale feed fails the retained receipt guard, that job stays unchanged and other valid jobs can still be annotated. Do not interpret this reason as delivery or bypass the normal authority/content recheck when the provider returns.
 
@@ -1782,7 +1747,7 @@ scope. Its internal zero-key sentinel does not represent an API key or grant
 permission; external key callers remain subject to current stored-key validity.
 
 
-### Manual bank statement finalization — evidence gate (AR-476)
+### Manual bank statement finalization — evidence gate
 
 For `reconciliation.finalize` with `scope=bank`, manual finalization evaluates
 exactly the balance, source coverage, posting bridge, exclusion evidence and
@@ -1794,13 +1759,11 @@ the exclusions and finalization. Successful finalization stores the evaluated
 controls in statement metadata. This does not create ledger entries or alter
 period-close policy. No built-in agent or saga is required.
 
-This gate does not establish completion of AR-476's separate pending-review,
-legacy-writer and deployment-readiness acceptance work. Statement finalization
-is not a period lock or permission to bypass review and approval controls.
+Statement finalization is not a period lock or permission to bypass review and approval controls.
 
 A manual finalizer rechecks statement status under its lock. If another writer
 already finalized it, the later attempt refuses and preserves the committed
-finalization record. This increment does not change automatic recomputation.
+finalization record.
 
 Automatic recomputation (after a line match, exclusion or unmatch) leaves a
 `locked` or `voided` statement exactly as stored, including its retained controls

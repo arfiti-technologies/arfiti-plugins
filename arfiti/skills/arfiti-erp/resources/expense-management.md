@@ -649,7 +649,7 @@ reasons to refuse expense deletion. These protections do not authorize deleting
 posted documents or unwinding payments.
 
 
-### Expense submission recovery (local AR-273 update; not deployed)
+### Expense submission recovery
 
 Expense submission keeps its request identity across uncertain outcomes, including
 ordinary dashboard or external-tool submissions without a Saga. If replay

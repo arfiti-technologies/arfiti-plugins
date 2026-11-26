@@ -186,16 +186,15 @@ VAT/worksheet presentation, but count its base once in an undirected taxable tot
 Sales-tax collected totals count output tax rather than adding input and output.
 
 
-### Assistant help in Admin (QA branch)
+### Assistant help in Admin
 
 The connectors list, connector details and tax returns page use the shared
 assistant chooser. Choose ChatGPT or Claude, or copy the page-specific question
 to another connected assistant. Opening help does not connect an assistant,
 change the active company, run a sync or file a return. Connector details retain
-the selected connector’s provider and name in the question. This change is in
-the draft QA branch; deployment has not been verified.
+the selected connector’s provider and name in the question.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Filing evidence in close checks
 
-Filing evidence matches a return’s own period or a reporting period for the same entity and authority. Candidate forms are selected by country or overlapping authority registration. An unfiled selected form without an applicability rule is advisory not_determined, not “missing” or “not expected”. Quarterly selection still assumes calendar quarters and says so; this is a disclosed existing selection limitation, not a universal tax rule.
+Filing evidence matches a return’s own period or a reporting period for the same entity and authority. Candidate forms are selected by country or overlapping authority registration. An unfiled selected form without an applicability rule is advisory not_determined, not “missing” or “not expected”. Quarterly selection assumes calendar quarters and says so; this is a disclosed selection limitation, not a universal tax rule.

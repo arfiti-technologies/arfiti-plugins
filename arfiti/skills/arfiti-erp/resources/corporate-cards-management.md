@@ -2,8 +2,7 @@
 
 ## Agent callback and failure evidence
 
-The built-in bank and card pipeline is removed (P-AR-42, November 2026; built, not
-deployed). A managed agent does this work through the public tools and raises a review
+The built-in bank and card pipeline is removed. A managed agent does this work through the public tools and raises a review
 task when it cannot decide; see "How the managed agents work" in agent-management.md.
 The rest of this section describes runs the built-in pipeline left behind.
 
@@ -712,8 +711,8 @@ back to `external_transaction_id`) + transaction type. A refund reusing a charge
 remains a separate source. Use `options: { on_duplicate: "skip" }` for an identical
 replay, or `"update"` for a compatible lifecycle update. Booked amount/currency
 changes are refused and require correction review. Metadata is normalized from
-an object or serialized JSON before replay checks. The normalization fix deployed in PR #226; production skip/update replay and
-booked-amount refusal tests passed without duplicate source/purchase rows.
+an object or serialized JSON before replay checks, so an identical replay
+creates no duplicate source or purchase rows.
 
 ---
 
@@ -1215,26 +1214,25 @@ not a card spending account. The generated code is retained in the audit entry.
 
 Documentation acceptance, source GL posting and AP settlement are independent. If a receipt has already produced a bill but the card charge is unposted, process the existing source through the Bank agent in card mode, scoped by `legal_entity_id` and `card_transaction_ids`. Verify `posted_transaction_id`; then link the existing bill through `card_purchase.manage` and settle through `reconciliation.match` with scope `ap` and the current purchase version. Do not create another bill or manually adjust expense accounts to bypass this sequence.
 
-Production QA verified cardholder defaults on a fresh card posting and its linked receipt bill after explicit workflow configuration. Cardholder defaults are used only when the transaction workflow enables `employee` as a dimension default source. A receipt uses its exact stored attachment-to-card link within the same entity; the cardholder is resolved for the posting date. Ambiguous links/history refuse processing. Explicit dimension values take precedence; reviewed Bill dimensions remain frozen. Business-purpose text is not a structured dimension assignment, and an employee's defaults do not automatically supply a project or override a product. Configure required dimensions and review missing values instead of assuming successful posting proves complete classification.
+Cardholder defaults are used only when the transaction workflow enables `employee` as a dimension default source. A receipt uses its exact stored attachment-to-card link within the same entity; the cardholder is resolved for the posting date. Ambiguous links/history refuse processing. Explicit dimension values take precedence; reviewed Bill dimensions remain frozen. Business-purpose text is not a structured dimension assignment, and an employee's defaults do not automatically supply a project or override a product. Configure required dimensions and review missing values instead of assuming successful posting proves complete classification.
 
 ### Settlement journal dimension preservation
 
 The settlement correction copies stored dimension identities, inheritance flags and provenance from the original bill AP-control line to the relief debit, and from the original card expense line to the expense-clearing credit. Partial applications retain the same classifications while scaling monetary amounts. Empty source classifications remain empty; current employee/vendor defaults are not reapplied. Existing account selection, FX handling and amount calculations are unchanged. The FX remainder line remains unclassified because it has no single source-line classification.
 
-The fix requires no migration. It changes newly created settlement journals only. An already posted journal must not be edited with SQL; use the supported reconciliation unmatch/reversal and re-match lifecycle after deployment and verify dimension balances. PR232 is deployed in production. QA journal54 was reversed through journal55 and rematched through journal56 using normal reconciliation workflows. Production verification confirms the three source expense dimensions and provenance were preserved, and Admin/MCP both show the purchase settled. This verifies manual settlement; automatic settlement remains subject to the tenant rollout policy.
+Settlement journals posted before this behaviour keep the classifications they were posted with. An already posted journal must not be edited with SQL; use the supported reconciliation unmatch/reversal and re-match lifecycle and verify dimension balances.
 
 
-### Historical investigation evidence visibility (QA branch, deployment pending)
+### Historical investigation evidence visibility
 
 An execution's saved investigation bill/attachment evidence is withheld if the
 bill is no longer readable in the entity, the attachment is deleted or outside
 that bill's owner space, or a saved reference is malformed. AP read permission is
 required for saved investigation metadata, including narrative without invoice IDs. A readable historical trace does not prove
-settlement or authorize retrying it. Purchase employee-scope verification remains
-open; this change does not expand card-workspace access.
+settlement or authorize retrying it. These checks do not expand card-workspace access.
 
 
-### Reconciliation request evidence reads (QA branch, not deployed)
+### Reconciliation request evidence reads
 
 Stored `reconciliation_agent` requests with action `investigate_purchase` or
 `review_purchase_settlement` require AP read permission and current purchase
@@ -1251,8 +1249,7 @@ hides the request. Attachment ownership uses its canonical owner type; card
 sources use master employee IDs, while purchases use entity employee IDs.
 Legacy requests without `source_evidence` remain supported. Readability does not
 approve settlement, refresh a historical snapshot, or bypass version/effect
-checks. General request-to-saga graph traversal, arbitrary metadata/free text
-and hosted acceptance remain open.
+checks.
 
 
 ### Generic card transaction read ownership
@@ -1283,11 +1280,10 @@ does not invalidate a proven historical event. Explicit key/URL disagreement,
 missing records, substituted files and wrong event bindings fail closed. The
 checks apply through nested Bill vendor originals and response copies. They do
 not require an active processing status or authorize submission, settlement or
-retry. Other payload sources retain their own contracts; provider-email binding
-and copied narrative remain separate open work.
+retry. Other payload sources retain their own contracts.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence for zero-value card verifications
 
 Zero-value card verifications are separated from financial movements only when amount is zero, posting_status is excluded, metadata.non_financial_reason is card_verification, and both GL links are absent. The close check additionally requires recon_status excluded. A marker alone is insufficient. Real exceptions remain outstanding. This does not authorize excluding a financial movement.
 
@@ -1303,7 +1299,7 @@ journal named in `detail.journal_ids` instead of excluding it. A journal another
 source already owns, a reversed journal or a reversal entry, or a different amount or date does not
 refuse. Built in, not a setting.
 
-### Card-line rollback receipts (AR-273, local; not deployed)
+### Card-line rollback receipts
 
 `card_statement_line.match`, `unmatch` and `exclude` can return a confirmed refusal
 only after the operation's owned database transaction has acknowledged rollback.

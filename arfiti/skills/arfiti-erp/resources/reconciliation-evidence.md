@@ -108,7 +108,7 @@ without another settlement. Expired investigation claims cannot dispatch more to
 interrupted calls retain their spend reservation until an authoritative receipt exists.
 
 
-### Control-account identity for reconciliation adjustments (unreleased)
+### Control-account identity for reconciliation adjustments
 
 A linked adjustment must find exactly one AP/AR control account in the target
 invoice's original GL for the selected entity. Missing or mixed control-account
@@ -123,10 +123,10 @@ journal. The shared writer validates the final account identity, activity and he
 status before creating the journal. Resolve the source evidence or account mapping
 and retry the supported operation; do not toggle manual-entry flags, invent an
 account number or mark the residual resolved without its journal. These checks do
-not activate AP/AR aging. The narrow residual write-off exception below now supplies
-a database-validated permission; other controlled-adjustment permissions remain open.
+not activate AP/AR aging. The narrow residual write-off exception below has a
+database-validated permission; other controlled adjustments do not.
 
-### Explicit receipt/refund offset (October 2026)
+### Explicit receipt/refund offset
 
 Use `reconciliation.match` with `scope="ar"`, `legal_entity_id`,
 `source_transaction_id` (AR_PAYMENT) and `refund_transaction_id` (AR_REFUND).
@@ -145,17 +145,15 @@ refund; unmatch before reversing the refund itself. Partial refunds, FX differen
 revenue refunds and unrelated payments are not accepted by this exact-offset path.
 They require their appropriate accounting workflow, never guessed netting.
 Invoice connectors exclude refund targets from invoice-application exports.
-Migration 649 updates both operational and report AR open-item functions, including
-the future-company template, before enabling this workflow. It changes no journals
-or existing application rows. Save function definitions before applying; rollback
-restores those definitions after unmatching any newly created offsets.
+Both the operational and the report AR open-item functions account for these
+offsets.
 
 Admin only shows a reconciliation-run link when an application actually belongs
 to a run. Direct receipt/application records can legitimately have no run.
 
-### Residual write-off source authorization (unreleased)
+### Residual write-off source authorization
 
-Before posting a residual write-off, the gateway now requires both the source and
+Before posting a residual write-off, the gateway requires both the source and
 invoice to satisfy the shared posted predicate and to have no reversing transaction.
 The customer (AR) or vendor (AP) must be present and identical on both documents.
 A status label alone or a same-entity link is insufficient. Missing posting evidence,
@@ -167,24 +165,23 @@ Existing limits, same-functional-currency restriction, recorded residual checks 
 locks still apply. This strengthens the source authorization of `write_off_item`; it
 does not grant a controlled-journal exception, change FX treatment, or activate aging.
 
-### Dated settlement adjustments (unreleased, migration 691)
+### Dated settlement adjustments
 
 A later-dated write-off or FX journal must not change aging before its journal date.
-New application-history events now take the later of the source date, invoice date
+Application-history events take the later of the source date, invoice date
 and linked variance-journal date. If an application is initially created with a
 later adjustment already attached, capture records an application-only snapshot at
 the document date and the adjusted snapshot at the later journal date. Attaching
 an adjustment to an existing application retains its earlier application snapshot.
 
-This changes future history capture only. Existing immutable snapshots are not
-rewritten: audit earlier events and review affected historical reports before an
-entity activation. This migration grants no controlled-journal exception and changes
-no live aging account membership.
+Immutable snapshots captured before this rule are not rewritten; audit earlier
+events when reviewing historical reports. The rule grants no controlled-journal
+exception and changes no aging account membership.
 
-### Audited residual write-off permission (unreleased, migrations 692–694)
+### Audited residual write-off permission
 
 For an entity with reviewed ordinary-journal enforcement enabled,
-`reconciliation.write_off_item` can now post a same-currency residual against the
+`reconciliation.write_off_item` can post a same-currency residual against the
 invoice's booked AP/AR control account. The database validates the existing applied
 settlement, completed run in the same entity/scope, posted unreversed payment and
 invoice, matching party, entity currency, configured limit, remaining invoice amount
@@ -204,9 +201,7 @@ reversal/correction workflows rather than editing the receipt.
 This exception currently supports `AP_PAYMENT`/`AR_PAYMENT` against the matching
 invoice type. It does not authorize FX, credit-memo/prepayment/refund/card-funded
 write-offs, multi-control allocations or arbitrary control-account corrections.
-Those routes require their own evidence and permission work before entity activation.
-Existing journals receive no automatic receipts. Installation leaves entity policy
-and live aging membership unchanged.
+Existing journals receive no automatic receipts.
 
 The shared adjustment writer dates both gateway write-offs and agent FX adjustments
 at the later payment/invoice date. Explicit repair dates must also be no earlier
@@ -214,9 +209,9 @@ than either document. A missing target in the selected entity is refused. Closed
 periods are still refused; there is no automatic move into an open period. The shared writer records header `functional_amount` equal to the
 functional GL debit total it books; this does not introduce currency conversion.
 
-### Booked evidence for automatic FX (unreleased)
+### Booked evidence for automatic FX
 
-The reconciliation agent now checks the stored settlement and both documents'
+The reconciliation agent checks the stored settlement and both documents'
 actual GL before creating a full-settlement FX journal. It requires a first,
 full AP/AR payment-to-invoice application, matching party/entity/currencies,
 posted unreversed documents, balanced complete ledger amounts and the same
@@ -231,12 +226,11 @@ FX journal. The match retains `pending_review`; its application is not silently
 undone by an FX refusal. Review the outstanding variance before considering the
 settlement complete; do not toggle account flags to force a journal.
 
-The application-side check is paired with the database permission in migration
-695 for the supported first full settlement described below. Other FX routes
-remain unsupported under controlled-journal enforcement. No entity policy or
-live aging membership is changed.
+The application-side check is paired with the database permission for the first
+full settlement described below. Other FX routes are not supported under
+controlled-journal enforcement.
 
-### Audited full-settlement FX permission (unreleased, migration 695)
+### Audited full-settlement FX permission
 
 With reviewed ordinary-journal enforcement enabled, the database permits the
 first full AP/AR payment-to-invoice FX adjustment when the journal exactly clears
@@ -248,7 +242,7 @@ is refused. Both source and target application amounts must be evidenced.
 
 The reconciliation run must belong to the same entity and AP/AR scope and be
 running or completed. A grouped run stamped with a different entity does not
-qualify: use an entity-specific run before activating this route. The counterpart
+qualify: use an entity-specific run. The counterpart
 must be a canonical active nonheader P&L account. A configured expense credit
 for a gain is permitted; neither account names nor caller metadata grant access.
 
@@ -261,14 +255,13 @@ agent finalizes runs after individual settlement transactions commit.
 
 Partial allocations, previously applied documents, different/multiple controls,
 card-funded settlements, prepayments, credit memos and historical receipt backfills
-are outside this permission. Verify required routes before entity activation.
-Existing journals are not silently grandfathered. Installation activates neither
-entity enforcement nor AP/AR aging membership.
+are outside this permission. Existing journals are not grandfathered.
 
 
-### Investigation request saga authority (QA branch; not deployed)
+### Investigation request saga authority
 
-A stored `reconciliation_agent` request with action `investigate_purchase` must
+The purchase investigation saga is removed; these checks govern reading the
+requests and sagas it left. A stored `reconciliation_agent` request with action `investigate_purchase` must
 reference a saga in the same organization and entity, with type
 `reconciliation_evidence_v1` and the same checkpoint purchase ID. Current AP and
 purchase-owner read rules still apply. Missing, malformed, foreign or differently
@@ -282,29 +275,16 @@ is not a condition for reading its history. Settlement-review requests retain
 their separate producer contract and do not acquire a required saga ID.
 
 These checks neither resume a saga nor approve settlement. Do not change stored
-references to bypass a read refusal. Additional unmapped metadata, arbitrary
-narratives, representative performance and hosted identity acceptance remain
-open. Isolated SQL validation covers this implementation; merge and deployment remain pending.
+references to bypass a read refusal.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence for AP/AR subledgers
 
-A close memo now names subledger exceptions, control differences and currencies; a balanced trial balance cannot certify an uncertified AP/AR aging report. Reversal evidence retains source document identities. This change does not repair historical payment applications or implement the reconciliation containment redesign.
+A close memo names subledger exceptions, control differences and currencies; a balanced trial balance cannot certify an uncertified AP/AR aging report. Reversal evidence retains source document identities. Historical payment applications are not repaired by the close memo.
 
-## Coverage evidence storage (local prerequisite, not activated)
+## Owned bundles
 
-Migration 753 and a private repository retain immutable, unattested coverage
-snapshots, invalidations and history. This does not accept new coverage declarations,
-change statement statuses, alter GL, switch current readers or make period close
-pass. Existing coverage behavior remains in place. Country/accountant/business
-requirements remain editable policy work in AR-477; full writer adoption remains
-AR-478 work. Do not treat `legacy_migration` provenance as an attestation or proof
-that workers were drained. Final backfill needs a separately reviewed deployment
-controller and verified worker-output manifest; no production adapter exists yet.
-
-
-Owned-bundle matches and native runs were removed (P-AR-42 step 3b, Nov 2026);
-production never recorded one. `reconciliation.match` refuses `owned_bundle_proposal`,
+Owned-bundle matches and native runs are removed; none were ever recorded. `reconciliation.match` refuses `owned_bundle_proposal`,
 `owned_bundle` and `native_continuation_recovery` by name and writes nothing: use
 the ordinary match with `source_transaction_id`, `applications` and an explicit
 `application_effective_date`. `get(reconciliation_run)` no longer returns
@@ -315,9 +295,9 @@ Run totals honour `summary.owned_bundle_outcome_v1` availability flags where a
 summary carries them; unavailable totals display "Unavailable", never zero.
 
 
-### Owned card purchase undo (2026-10-23)
+### Owned card purchase undo
 
-With reviewed migration 767 installed, the supported `reconciliation.unmatch`
+The supported `reconciliation.unmatch`
 workflow accepts `undo_bundle_receipt_id`, `source_transaction_id`,
 `reconciliation_run_id`, `legal_entity_id`, an explicit `undo_effective_date`, and
 `reason`. Obtain the original receipt from scoped `get(reconciliation_run)`:
@@ -340,11 +320,10 @@ all undo work even when an outer caller catches it. Original bundle evidence is
 retained. Identical receipt/date/reason/actor replay returns the saved result;
 changed input conflicts and never sweeps later applications into an old undo.
 
-Missing or altered storage guards refuse. Concurrent effective-policy editing may
+Concurrent effective-policy editing may
 cause a nonwaiting refusal; retry after that edit settles, with current authority
 rechecked. This protocol does not widen simple-cash/native allocation receipts or
-invent an accounting date policy. It is locally verified, not deployed; retained
-pipeline versions and current activation pins are unchanged.
+invent an accounting date policy.
 
 
 ### Card match undo without a bundle receipt (AR-1274, migration 905)
@@ -468,12 +447,10 @@ Two things to know before relying on it:
 
 ### Owned residual writeoff and dated undo
 
-The locally verified owned residual protocol covers same-currency, dated cash
-applications to AP/AR invoices with retained original application evidence. It
-requires migration768's complete storage manifest, the existing controlled693
-writeoff policy and the current configured workflow permission/approval controls.
-No built-in agent or saga is required. Missing or altered storage refuses before
-financial effects; installing a table alone is insufficient.
+The owned residual protocol covers same-currency, dated cash applications to
+AP/AR invoices with retained original application evidence. It uses the audited
+residual write-off permission above and the current configured workflow
+permission/approval controls. No built-in agent or saga is required.
 
 Submit `reconciliation.write_off_item` with an explicit
 `write_off_effective_date` and the existing item/reason inputs. The date must
@@ -483,7 +460,7 @@ Pending approval creates no disposal. Execution rechecks the original submitter'
 current key, entity scope and permissions, including after delayed approval.
 
 The original application receipt and cash consumption remain unchanged. The
-existing693 receipt records the disposal journal and its dated approved input;
+residual write-off permission receipt records the disposal journal and its dated approved input;
 target settlement increases only by that retained disposal. Use the returned
 `write_off_journal_entry_id` as `undo_residual_journal_id` in the existing
 `reconciliation.unmatch` operation, with exact source/run/entity, AP/AR scope,
@@ -501,8 +478,7 @@ Do not retry an unavailable owned operation through an undated legacy call.
 This capability does not extend to FX residuals, arbitrary historical applications
 or the separately scoped card-purchase undo protocol. Legacy cohorts retain their
 existing contracts. The existing `void_run` finalizes only after active dated applications have
-been undone explicitly; see the cancellation/finalization contract below. This is local implementation verification, not
-production deployment, policy approval or pipeline activation.
+been undone explicitly; see the cancellation/finalization contract below.
 
 
 ### Cancelling a partial run and finalizing void
@@ -519,13 +495,11 @@ Void does not infer an undo date or perform a new bulk financial protocol.
 
 After supported undo, the existing void operation can finalize the run. It checks
 the run's current entity access even with zero active items and refuses unresolved
-owned attempts or source claims. On installed762, public void retains the exact
+owned attempts or source claims. Public void retains the exact
 original key/entity scope and approved payload in immutable submission evidence;
 it rechecks current authority in the same approved transaction, including after
 an approval wait. Broadening the key later does not broaden the original scope.
-Malformed retained authority refuses rather than becoming unrestricted. Tenants
-without762 retain the existing legacy contract; this is not a blanket legacy-key
-retention certification. It preserves failed/manual-review members and all
+Malformed retained authority refuses rather than becoming unrestricted. It preserves failed/manual-review members and all
 original receipts/history; it does not dismiss those records. Public same-key
 replay returns the prior result without another financial effect.
 
@@ -533,10 +507,7 @@ Current shared retained 1.0/1.1 writers fence terminal voided runs:
 financial applications, review/card records and summary writes cannot reopen the
 run. Contention refuses without waiting on an inverted run lock; retry after the
 other owner finishes, using current evidence. Completed nonvoided runs retain
-supported reconsideration behavior. This shared-import compatibility correction
-does not change retained block registrations or pipeline pins. Old binaries that
-do not load these helpers still require operational drain; arbitrary SQL and
-production worker shutdown are not certified by the local tests.
+supported reconsideration behavior.
 
 
 ### Dashboard void submission result
@@ -546,6 +517,6 @@ The bank and card run pages distinguish a submitted or pending void workflow fro
 
 ### Void approval retains original authority
 
-`reconciliation.void_run` on a tenant with migration 762 retains the authenticated originating key, entity scope and exact saved approval payload in private immutable submission evidence. Delayed approval rechecks that original key's current validity and scope, current caller permissions and configured entity policy before effects.
+`reconciliation.void_run` retains the authenticated originating key, entity scope and exact saved approval payload in private immutable submission evidence. Delayed approval rechecks that original key's current validity and scope, current caller permissions and configured entity policy before effects.
 
-The exact submission identity/retention prerequisite applies when void reads that evidence. A missing primary key, conditional or disabled retention trigger, altered retention function, or nonprivate grants makes that capability unavailable; it does not widen authority. Tenants without762 retain the existing nonowned legacy void route.
+The exact submission identity/retention prerequisite applies when void reads that evidence. A missing primary key, conditional or disabled retention trigger, altered retention function, or nonprivate grants makes that capability unavailable; it does not widen authority.

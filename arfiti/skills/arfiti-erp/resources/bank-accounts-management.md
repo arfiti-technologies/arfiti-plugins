@@ -1817,7 +1817,7 @@ If an account is not eligible the quote says so and lists `eligible_accounts`
 — tell the user which accounts qualify instead of retrying.
 
 
-### Bank-configuration reference reads (QA branch, not deployed)
+### Bank-configuration reference reads
 
 The installed `create_bank_account` and `create_bank_account_for_currency`
 producer metadata must name a stored `source_bank_account_id` in the request or
@@ -1838,8 +1838,7 @@ these field meanings.
 This verifies stored reference authority, not the accuracy of copied names,
 IBANs, balances or free-text line descriptions, nor account creation or queued
 statement import completion. Use authorized source/configuration recovery for
-broken bindings; do not edit history to force a read or retry. Other configuration
-actions and hosted identity acceptance remain open.
+broken bindings; do not edit history to force a read or retry.
 
 ## Bank-number reader compatibility
 
@@ -1847,33 +1846,33 @@ Bank account/routing-number masked readers accept legacy plaintext and ciphertex
 
 ### Excluded source posting and adoption
 
-The shared movement posting boundary checks the locked source before registering or adopting an effect. Bank sources marked `recon_status=excluded` and card sources marked `posting_status=excluded` return `source_excluded`. Review the exclusion before requesting new posting/adoption. The locally verified `revoke_exclusion` workflow described below requires its own configured authority and installed770 storage; until deployed, keep the source excluded and follow reviewed operational repair. Caller metadata cannot override this check. Existing financial journals remain unchanged; the refusal does not mean historical cash effects are absent. Ordinary replay of a non-excluded source continues to adopt its recorded effect. A previously recorded gateway response remains historical evidence, not permission for a new posting.
+The shared movement posting boundary checks the locked source before registering or adopting an effect. Bank sources marked `recon_status=excluded` and card sources marked `posting_status=excluded` return `source_excluded`. Review the exclusion before requesting new posting/adoption. To put an excluded source back into posting, restore it with `revoke_exclusion` (described below), which runs under its own configured workflow and authority. Caller metadata cannot override this check. Existing financial journals remain unchanged; the refusal does not mean historical cash effects are absent. Ordinary replay of a non-excluded source continues to adopt its recorded effect. A previously recorded gateway response remains historical evidence, not permission for a new posting.
 
-Local actual BankEntry controls cover ordinary posting, excluded posting, preserved existing effects and an exclusion winning while posting waits. Broader sibling-exclusion and writer compatibility acceptance remains tracked in the canonical bank/card plan.
+When an exclusion and a posting race, the exclusion wins: a posting waiting on the source is refused once the exclusion commits, and existing effects are preserved.
 
 An excluded authenticated representation also blocks new posting/adoption by another representation of the **same booked leg** (`sibling_excluded`). This remains true when authenticated identity is attached after the exclusion. The relationship comes from saved connector evidence, not caller metadata or matching amount/date. Distinct opposite transfer legs are not treated as the same leg. Concurrent sibling changes return a retryable contention error and roll back the attempted posting; retry only after that transaction has ended. Existing journals and exclusion remain unchanged.
 
-Close-policy configuration does not authorize posting an excluded source or its authenticated same-leg sibling. Local checks populated the existing configuration store with `period_close.policy` → `card_lines_confirmed.excluded_rows=revalidate` and verified both posting refusals remain unchanged. This does not add a close-policy activation feature or change close treatment.
+Close-policy configuration does not authorize posting an excluded source or its authenticated same-leg sibling. A `period_close.policy` setting such as `card_lines_confirmed.excluded_rows=revalidate` leaves both posting refusals in place; it changes only close treatment.
 
-For an unchanged source with a previously committed AP payment, exact posting replay adopts the existing payment before checking depleted invoice capacity. It must not apply the invoice twice or create another payment. A different source cannot borrow that replay result: normal invoice state/capacity checks still run before allocating a new posting. Local acceptance includes a lost response after actual payment commit, unchanged invoice paid/due counters and one durable application; it does not authorize retry with a different economic instruction.
+For an unchanged source with a previously committed AP payment, exact posting replay adopts the existing payment before checking depleted invoice capacity. It must not apply the invoice twice or create another payment. A different source cannot borrow that replay result: normal invoice state/capacity checks still run before allocating a new posting. A replay after a lost response leaves the invoice paid/due counters unchanged and keeps one durable application; it does not authorize retry with a different economic instruction.
 
 ### Explicit existing journal anchors
 
 A source's explicit journal pointers and exact source-linked journal take precedence over date/reference hints. Posting checks that they agree and that the journal represents the source's signed bank-account amount and currency using receipt-first cash evidence. An unposted draft returns `posting_in_flight`; conflicting, missing, wrong-scope, reversed or mismatched financial evidence returns `anchored_journal_mismatch`. Review the existing evidence rather than creating a replacement journal. A fitting posted anchor may still be adopted when descriptive date/reference hints differ; this does not certify provider ownership from those hints. Busy financial evidence refuses the attempted transaction without waiting in a conflicting lock order.
 
-### Typed exclusion evidence (locally verified; undeployed)
+### Typed exclusion evidence
 
-The exclusion input accepts `exclusion_basis.kind=not_booked` for a ledger-no-live-owner assertion, or `duplicate_source` with an exact survivor source kind/ID. These inputs require the existing configured exclusion workflow and current authority; they are not a new approval policy. Saved provider metadata or reason text cannot substitute for authenticated identity. A later contradictory ledger owner is retained as `excluded_evidence_stale` review evidence and blocks settlement facts; the existing journal and exclusion are preserved. Do not automatically repost or clear the hold. Local workflow atomicity, replay, contradiction readers and scoped storage checks are verified; deployment remains pending in the canonical bank/card plan. Historical reversed ownership reservations are retained but are not counted as live ledger owners. Legacy free-text exclusions remain unclassified. Automatic card application rechecks the locked source and refuses `source_excluded` before changing the source or recording a reconciliation item. Availability (AR-1172, migration 886): every organisation and the system template have a `bank_statement_line.exclude` workflow definition with no approval steps and `required_permission` `accounting:write`. A bank line exclusion, reason-only or typed, therefore runs through the workflow engine, executes immediately and leaves a workflow instance as its audit trail; an organisation that wants an approval adds steps to that definition through the normal workflow editing. The caller needs `accounting:write` (owners and admins hold every permission; an agent allowed to run the workflow holds it through the definition). A typed exclusion additionally needs `bank:write`, which is checked in code and is not a permission a role can be given today, so in practice a typed exclusion is submitted by an owner or admin. An organisation that has no active definition is refused a typed exclusion with `workflow_not_configured` and nothing changes; before AR-1172 that refusal read "Provenance approval owner expired or changed". Organisations that the 16 October 2026 compatibility installer configured (`Automatic bank_statement_line.match` / `unmatch` / `exclude`, no steps, no `required_permission`) keep those definitions: their reason-only exclusions run as before, and a typed exclusion there is still refused ("Provenance matching workflow is not configured") until a permission is set on that definition. The migration also adds the `bank_statement_line` workflow object type where it is missing (the installer, not a migration, had created it). The seeded `card_statement_line.exclude` definition carries no `required_permission`, so a typed card exclusion is still refused ("Provenance matching workflow is not configured"). A `duplicate_source` exclusion additionally needs trusted connector bindings with one identity on both lines; lines imported without them (for example lines ingested before the bindings existed) can use `not_booked` only when no live journal owns them, and otherwise only a reason-only exclusion.
+The exclusion input accepts `exclusion_basis.kind=not_booked` for a ledger-no-live-owner assertion, or `duplicate_source` with an exact survivor source kind/ID. These inputs require the existing configured exclusion workflow and current authority; they are not a new approval policy. Saved provider metadata or reason text cannot substitute for authenticated identity. A later contradictory ledger owner is retained as `excluded_evidence_stale` review evidence and blocks settlement facts; the existing journal and exclusion are preserved. Do not automatically repost or clear the hold. Historical reversed ownership reservations are retained but are not counted as live ledger owners. Legacy free-text exclusions remain unclassified. Automatic card application rechecks the locked source and refuses `source_excluded` before changing the source or recording a reconciliation item. Availability: every organisation and the system template have a `bank_statement_line.exclude` workflow definition with no approval steps and `required_permission` `accounting:write`. A bank line exclusion, reason-only or typed, therefore runs through the workflow engine, executes immediately and leaves a workflow instance as its audit trail; an organisation that wants an approval adds steps to that definition through the normal workflow editing. The caller needs `accounting:write` (owners and admins hold every permission; an agent allowed to run the workflow holds it through the definition). A typed exclusion additionally needs `bank:write`, which is checked in code and is not a permission a role can be given today, so in practice a typed exclusion is submitted by an owner or admin. An organisation that has no active definition is refused a typed exclusion with `workflow_not_configured` and nothing changes. Organisations that the 16 October 2026 compatibility installer configured (`Automatic bank_statement_line.match` / `unmatch` / `exclude`, no steps, no `required_permission`) keep those definitions: their reason-only exclusions run as before, and a typed exclusion there is still refused ("Provenance matching workflow is not configured") until a permission is set on that definition. The seeded `card_statement_line.exclude` definition carries no `required_permission`, so a typed card exclusion is still refused ("Provenance matching workflow is not configured"). A `duplicate_source` exclusion additionally needs trusted connector bindings with one identity on both lines; lines imported without them (for example lines ingested before the bindings existed) can use `not_booked` only when no live journal owns them, and otherwise only a reason-only exclusion.
 
 ### Journal ownership when matching a source
 
-Supported manual and automatic matching validates a live, unreversed, report-eligible journal and its exact signed cash-account quantity/currency under source and journal admission. Distinct movements cannot reuse the same cash leg of a journal. Exact authenticated representations may share it. Ownership is per recorded cash leg (AR-1171, migration 887): a transfer between two of the entity's bank accounts is one journal with one recorded leg per account, and the statement line of each account matches its own leg, so both lines of an own-account transfer are matched to the one transfer journal with `bank_statement_line.match` (any providers, also manually imported statements). The line must be on the leg's bank account and equal its signed amount and currency exactly (`anchored_journal_mismatch` otherwise); a leg takes one line, so a second line on the same account is refused (`journal_already_claimed`); `unmatch` changes only its own line; when the transfer was posted from the other line, the unmatched line's leg stays reserved for it (it can be matched to the same journal again, another line cannot take the leg) until the journal is reversed. Legs are recorded when the transfer is posted as a `BANK_TRANSFER` through the gateway (same currency, or two currencies with valuation evidence). A journal with no recorded legs (a transfer booked before that evidence existed, or as a plain journal entry) keeps one owner: its second line is still refused and is closed either by reversing the journal and posting the transfer again, or with a reason-only exclusion that names the journal. No evidence is backfilled for older journals. A `void` journal remains unavailable even when it retains `posted_at`. Existing GL and historical links are preserved on refusal.
+Supported manual and automatic matching validates a live, unreversed, report-eligible journal and its exact signed cash-account quantity/currency under source and journal admission. Distinct movements cannot reuse the same cash leg of a journal. Exact authenticated representations may share it. Ownership is per recorded cash leg: a transfer between two of the entity's bank accounts is one journal with one recorded leg per account, and the statement line of each account matches its own leg, so both lines of an own-account transfer are matched to the one transfer journal with `bank_statement_line.match` (any providers, also manually imported statements). The line must be on the leg's bank account and equal its signed amount and currency exactly (`anchored_journal_mismatch` otherwise); a leg takes one line, so a second line on the same account is refused (`journal_already_claimed`); `unmatch` changes only its own line; when the transfer was posted from the other line, the unmatched line's leg stays reserved for it (it can be matched to the same journal again, another line cannot take the leg) until the journal is reversed. Legs are recorded when the transfer is posted as a `BANK_TRANSFER` through the gateway (same currency, or two currencies with valuation evidence). A journal with no recorded legs (a transfer booked before that evidence existed, or as a plain journal entry) keeps one owner: its second line is still refused and is closed either by reversing the journal and posting the transfer again, or with a reason-only exclusion that names the journal. No evidence is backfilled for older journals. A `void` journal remains unavailable even when it retains `posted_at`. Existing GL and historical links are preserved on refusal.
 
-Legacy journals are supported only where document or functional currency supplies the exact known cash basis and the current mapped account is unique. Ambiguous historical links require review, not automatic repair. These controls govern the updated supported writers; raw SQL protection and old-worker rollout requirements remain separately tracked in the canonical implementation plan.
+Legacy journals are supported only where document or functional currency supplies the exact known cash basis and the current mapped account is unique. Ambiguous historical links require review, not automatic repair.
 
-### Restoring an excluded bank line (AR-1178)
+### Restoring an excluded bank line
 
-An excluded bank statement line is put back into its open state with `bank_statement_line.revoke_exclusion`. Since migration 888 every organisation and the system template have a workflow definition for it (no approval steps, `required_permission` `accounting:write`), so it executes immediately and leaves a workflow instance; an organisation that wants an approval adds steps to that definition. Like a typed exclusion, the operation also checks `bank:write` in code, which today an owner or admin has.
+An excluded bank statement line is put back into its open state with `bank_statement_line.revoke_exclusion`. Every organisation and the system template have a workflow definition for it (no approval steps, `required_permission` `accounting:write`), so it executes immediately and leaves a workflow instance; an organisation that wants an approval adds steps to that definition. Like a typed exclusion, the operation also checks `bank:write` in code, which today an owner or admin has.
 
 1. Read the line: `get_entity("bank_statement_line", <id>)`. `connector_observations.exclusion` gives `excluded`, `expected_exclusion_hash` and, for a typed exclusion, `decision_id`.
 2. Submit:
@@ -1893,35 +1892,25 @@ The line returns to `unmatched` and can be matched or excluded again. Its journa
 
 Refused, with nothing changed: a line that is not excluded; a line that changed since it was read (read it again); a missing reason; an entity the caller cannot act for; a line on a voided statement; a repeat of a request key with a different payload; an organisation with no active definition (`workflow_not_configured`). Exclusion and restore are not tied to the fiscal period: neither posts to the ledger.
 
-### Explicit exclusion revocation (locally verified; undeployed)
+### Exclusion revocation for bank and card lines
 
 Submit `revoke_exclusion` on `bank_statement_line` or `card_statement_line` only through its configured workflow. Supply `legal_entity_id`, `source_id`, `expected_exclusion_hash`, the current `exclusion_decision_id` for a typed exclusion, a stable `request_key`, and a review `reason`. Scoped source readback supplies the fingerprint and typed decision. A legacy unclassified exclusion uses the fingerprint with no decision UUID. Missing configuration does not inherit exclude approval. Original key/entity scope and current permission are checked again at execution.
 
 The operation atomically restores bank `unmatched` or card `pending_recon`, updates parent controls, and retains an immutable before/after receipt. Financial pointers, journals and review holds are preserved. A card with a retained pointer remains marked posted but requires reconciliation review; pointer presence does not certify current fit. Historical exclusion metadata remains history, while current status/readback determines whether the source is excluded. Complete any outstanding provenance review through its separate supported operation; revocation does not clear it automatically.
 
-Exact retry returns the original revocation receipt plus separately current exclusion state. Changed source or decision requires a fresh reviewed proposal. Raw clearing or relinking of an excluded source is refused by the installed770 guard. Deployment and old-worker drain remain required operational steps; these local tests do not activate production.
+Exact retry returns the original revocation receipt plus separately current exclusion state. Changed source or decision requires a fresh reviewed proposal. Raw clearing or relinking of an excluded source is refused by the database.
 
 
-### AR729 local ownership backstop (undeployed)
+### Journal ownership reservations
 
-Draft771 adds database-maintained reservations for every journal assigned to a booked movement. Clearing a live source link does not free its historical journal for another movement. Exact original reattachment remains supported; replacing a retained target requires its verified reciprocal reversal. Actual settlement recovery and reconfirmation preserve every original through repeated cycles. Unsupported destructive deletion or unclassified legacy history returns an integrity refusal; no metadata or GUC authorizes bypass.
+The database maintains a reservation for every journal assigned to a booked movement. Clearing a live source link does not free its historical journal for another movement. Exact original reattachment remains supported; replacing a retained target requires its verified reciprocal reversal. Actual settlement recovery and reconfirmation preserve every original through repeated cycles. Unsupported destructive deletion or unclassified legacy history returns an integrity refusal; no metadata or GUC authorizes bypass.
 
-Protected mutations use READ COMMITTED and nonwaiting source/journal admission. Retry the whole owned operation after `bank_claim_busy`; do not retry a partial financial write. Raw GL/dimension changes and competing header anchors serialize with first claims. Shared receipt-first cash fit preserves authenticated same-leg and recorded opposite transfer sharing. Historical unrelated multilinks remain untouched by migration and descriptive edits, but do not authorize new ambiguous links. Pre-existing NULL-target movements remain unclassified until a reviewed migration census establishes their history.
+Protected mutations use READ COMMITTED and nonwaiting source/journal admission. Retry the whole owned operation after `bank_claim_busy`; do not retry a partial financial write. Raw GL/dimension changes and competing header anchors serialize with first claims. Shared receipt-first cash fit preserves authenticated same-leg and recorded opposite transfer sharing. Historical unrelated multilinks are left as they are, including by descriptive edits, but do not authorize new ambiguous links. Movements recorded without a target journal before the reservations existed remain unclassified.
 
 Coverage evidence stores bank-account IDs, not GL account IDs. Account-configuration
 review keeps the actual bank `gl_account_number` mapping in its reference census;
 coverage identity columns do not themselves authorize or block a policy change.
 Unknown account-bearing columns still require inventory review.
-
-
-### Reviewed AP/AR payment effect receipts (local candidate)
-
-Reviewed AP/AR payment creation checks the exact `transaction.post` authority
-and records its causal effect inside the same database transaction. Receipt failure
-rolls back the effect. AR approval intent is captured before execution normalization,
-so normalization cannot silently change the approved intent. Enrolled adoption
-continues to be refused by the existing fresh-effect contract; ordinary non-enrolled
-adoption is unchanged. This grants no new authority and is not deployed.
 
 
 ### Transfer document amounts and cash valuation
@@ -1936,22 +1925,12 @@ each GL line describes its document-to-functional conversion. This does not
 choose an FX-gain policy or bypass the existing journal balance checks.
 
 
+### Reconciliation status on a claimed journal
 
-### Valuation clone scope correction (local candidate)
-
-Additive migration772 repairs the organization-scope literal in cloned cash
-valuation validators. It preserves stored financial evidence and quotes and
-leaves historical migration763 unchanged. This correction is not deployed.
-
-
-### Claimed journal reconciliation projection (local candidate)
-
-Additive migration773 allows the existing `recon_status` projection to change
-on a claimed journal. Financial amounts, currency, source identity, GL rows and
-dimensions remain protected, including combined status-plus-financial mutations.
-Deferred owner and cash-fit checks remain active. Readiness recognizes only the
-exact reviewed old and corrected function bodies during upgrade. This correction
-is not deployed; historical771 remains unchanged.
+The `recon_status` of a claimed journal can change. Its financial amounts,
+currency, source identity, GL rows and dimensions stay protected, including when
+a status change is combined with a financial change. Deferred owner and cash-fit
+checks still run.
 
 ### Connector observation identity references
 
@@ -1974,7 +1953,7 @@ columns are classified as non-GL identities; unknown account fields still refuse
 
 Bank response delivery compares each saved content field exactly, including a legacy null response contract. A missing contract field or a changed value is refused; null is not silently converted to an empty contract. This preserves the existing legacy response compiler and does not introduce a new response policy, authorize financial replay, or bypass current workflow authority.
 
-### Final-review corrections — 2026-10-24 (local, not deployed)
+### Second reversals, cross-entity transfer locks and match correction
 
 The shared reversal helper refuses a second reversal of a journal already recorded
 as a reciprocal in cash-leg or complete-valuation evidence. Such a second reversal
@@ -1988,7 +1967,7 @@ posting transaction. Late lock acquisition is nonwaiting. It re-resolves economi
 before recording success; changes made by the owning connection also abort both
 journals. Prices, rate choices and rounding policy remain explicit editable inputs.
 
-With migration774 installed, supported bank/card matches to an existing journal
+Supported bank/card matches to an existing journal
 record match-only provenance when there is no prior financial claim, authenticated
 provider binding, shared movement or source-created journal. Unmatch requires a
 reason for these recorded associations and atomically releases their active claim,
@@ -2001,10 +1980,9 @@ Existing configured authorization and approval controls still apply to match and
 unmatch through every supported client; this does not require an internal saga.
 There is no country or accountant-specific rule in the release mechanism.
 
-Without migration774, existing conservative behavior remains. Older associations
-without recorded provenance, source-created journals, authenticated provider
-claims and shared/ambiguous movements are not automatically releasable. Unmatch
+Older associations without recorded provenance, source-created journals,
+authenticated provider claims and shared/ambiguous movements are not
+automatically releasable. Unmatch
 may clear their visible link while retaining financial ownership, so a different
 journal remains refused. Use reviewed recovery; do not reverse a valid journal or
-edit reservations directly merely to bypass that refusal. Partial or altered774
-storage refuses the operation. These changes are locally verified, not deployed.
+edit reservations directly merely to bypass that refusal.

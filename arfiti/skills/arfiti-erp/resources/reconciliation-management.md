@@ -1,6 +1,6 @@
-## Explicit application dates (local candidate; not deployed)
+## Explicit application dates
 
-The candidate manual `reconciliation.match` and `reconciliation.confirm_item`
+The manual `reconciliation.match` and `reconciliation.confirm_item`
 paths require `application_effective_date` (YYYY-MM-DD) for simple AP/AR cash
 payment-to-invoice applications in the entity's functional currency. Manual
 `reconciliation.unmatch` requires `undo_effective_date` for that cohort. Missing
@@ -39,26 +39,23 @@ admission path is added; ordinary standalone payment reversal remains a separate
 path. Invoice cancellation is not a payment application reversal. Missing or
 inconsistent history refuses rather than reconstructing a balance from a header.
 
-This local candidate requires migration 751 and coordinated caller changes.
-Older callers that omit the date receive a refusal; do not retry with an invented
+A caller that omits the date receives a refusal; do not retry with an invented
 date, force flag or direct SQL. The public validator schema exposes the date
 fields. Dashboard Confirm asks for an explicit date for eligible cash pairs;
 the field starts empty. Native allocation dates remain unchanged, and supplying
-the new date field to that native path is refused rather than ignored. Full aging/control
-reports, all automatic writers and entity-wide containment are outside this
-candidate's verified scope.
+the date field to that native path is refused rather than ignored. These dates
+govern the manual match, confirm and unmatch paths only; automatic writers
+follow their own date rules.
 
-## Already-settled missing batch links (candidate operator repair)
+## Already-settled missing batch links
 
 When the invoice is already paid and its existing payment application is intact,
-do not apply it again. The candidate `repair_settled_payment_links` operator service
-repairs only missing batch/statement links and audit receipts, preserving balances,
-applications (including legacy null source consumption), ledger entries and dates.
-It is not deployed or exposed as an agent operation. Different booking dates need
-exact provider/request identity and corroborating stored creation/completion dates.
-Use a reviewed no-change preview and exact fingerprint with explicit scoped approval;
-no normal confirmation, status-sync or ad-hoc write is a substitute. Never bypass
-an adoption refusal or rewrite financial evidence to make it pass.
+do not apply it again. A missing batch-line or statement link on such an invoice
+is repaired by the platform operator, not through a tool or workflow: there is no
+agent operation for it. Report the batch line, statement line, payment and invoice
+to the operator. No normal confirmation, status-sync or ad-hoc write is a
+substitute. Never bypass an adoption refusal or rewrite financial evidence to make
+it pass.
 
 ## Automatic proposals that require review
 

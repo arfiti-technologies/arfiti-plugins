@@ -1,6 +1,6 @@
 # Chart of Accounts Management
 
-> **MSEO release contract:** Use master account identity with legal-entity context. Do not infer identity from effective-view fallback expressions. See the dimensions-management resource for assignment, approval and compatibility rules.
+> **MSEO contract:** Use master account identity with legal-entity context. Do not infer identity from effective-view fallback expressions. See the dimensions-management resource for assignment, approval and compatibility rules.
 
 **Purpose:** Manage the organization's chart of accounts (GL accounts) used for financial transaction categorization and reporting
 
@@ -1227,14 +1227,16 @@ The shipped US GAAP accounts 6510–6560 and IFRS depreciation lines 6410–6470
 
 For existing accounts created from the faulty defaults, first verify exact identity and classification against the applicable template. `account.update` accepts subtype corrections, normal-balance corrections and type changes without GL history (plus cogs ↔ expense with history). The maintenance recovery documented in the fixed-assets resource/guide supports one explicitly selected, exact-matching default account at a time, with preview, environment guards, and atomic audit logging. Custom charts must be reviewed separately; never infer a correction from a number alone. Recheck income statement and balance sheet after classification changes because historical presentation changes even though GL debit/credit amounts are unchanged.
 
-### Header posting checks (hardening branch, unreleased)
+### Header posting checks
 
 Journal validation and its direct account lookup reject inactive/header accounts.
-Posting-profile create/update rejects those selections too. The optional native
-header-account guard protects GL and both populated posting-profile sides; a referenced
-account cannot become a header. These changes do not yet enforce ordinary manual-entry
-permissions or activate the planned AP/AR membership transition. Use the structured
-flags, never account names, and do not change historical flags to bypass a refusal.
+Posting-profile create/update rejects those selections too. A native database guard
+that protects GL and both populated posting-profile sides (and stops a referenced
+account becoming a header) is installed per schema by an operator; it is not enforced
+everywhere, so do not rely on it being present. These checks do not by themselves
+enforce manual-entry permissions (see the per-entity journal policy below) or change
+AP/AR aging membership. Use the structured flags, never account names, and do not
+change historical flags to bypass a refusal.
 
 ### Mandatory account subtype
 
@@ -1259,7 +1261,7 @@ organization and identity remain protected. Entity overrides cannot change effec
 activity/manual-entry scope. A usage marker cannot be cleared, and deletion remains refused
 after references disappear. The operator correction path below applies to other settings
 only with no retained financial evidence, except clearing a wrong header flag, which it
-allows on a used account. This does not activate AP/AR aging membership.
+allows on a used account. This does not change AP/AR aging membership.
 
 ### Reviewed configuration corrections (operator maintenance)
 
@@ -1280,20 +1282,23 @@ columns or unsupported types require operator review of the inventory, never aut
 exclusion. Old unapplied proposals must be prepared/reviewed again after the inventory update.
 It rechecks under locks, audits atomically and leaves
 no lasting permit. Source references, stale evidence or unsupported source-table shapes
-refuse the operation. Normal account/import workflows cannot use the permit. Entity-override changes, retirement with history and AP/AR activation remain separate
-unfinished transitions. Classification corrections follow the rules above. An idempotent receipt is not proof the account was never changed later;
+refuse the operation. Normal account/import workflows cannot use the permit. Entity-override changes, retirement with history and AP/AR activation are not
+supported by this path. Classification corrections follow the rules above. An idempotent receipt is not proof the account was never changed later;
 read `current_state_matches_receipt` too.
 
 
-Unreleased migrations 686–694 add reviewed per-entity enforcement for ordinary
-`JOURNAL_ENTRY` accounts. Installation leaves it disabled. When activated, accounts
+### Per-entity ordinary-journal policy
+
+Ordinary `JOURNAL_ENTRY` accounts are subject to a per-entity policy. It is enabled
+automatically for a new entity when the entity is created; an existing entity keeps it
+disabled until an operator activates it after review. When enabled, accounts
 must be active, non-header and effectively `allow_manual_entries=true`; both executor
 preflight and DB commit enforce this. Caller metadata cannot override a refusal.
 Use a supported subledger operation for control-account adjustments; never toggle flags
 to force a posting. Exact, reciprocally linked dated reversals and the evidence-backed residual write-off
 path below have checked exceptions; other control adjustments remain refused.
-The operator activation receipt is permanent and source changes invalidate a proposal.
-This does not activate AP/AR aging membership or certify other typed posting routes.
+The activation receipt is permanent and source changes invalidate a proposal.
+This does not change AP/AR aging membership or certify other typed posting routes.
 
 
 Shared service journal posting checks explicit master account IDs as well as numbers
@@ -1304,30 +1309,27 @@ Automated callers retain their typed operation semantics; these checks do not au
 control-account journals where the reviewed manual-entry policy would refuse them.
 
 Activation review and database enforcement use the same exact-reversal permission
-check. Valid historical reversals alone no longer block a proposal. Missing reciprocal
+check. Valid historical reversals alone do not block a proposal. Missing reciprocal
 links, wrong dates, incomplete or non-finite amounts remain unresolved. This exception
 does not authorize a write-off, FX journal or arbitrary control-account correction.
 
-Profile-transition proposals now bind a streamed SHA-256 fingerprint of retained
+Profile-transition proposals bind a streamed SHA-256 fingerprint of retained
 entity headers, GL rows and application history, not only counts. Same-count edits
 refuse apply; regenerate older proposals and obtain a new exact review. Apply locks
-these source tables before taking its snapshot. This does not expand the supported
-operations beyond reviewed unused replacement and narrow acquisition retirement.
+these source tables before taking its snapshot. 
+### Controlled-reversal currency permission
 
-### Controlled-reversal currency permission (unreleased)
-
-Migration 690 requires the original and reversal functional currencies to agree
+The exact-reversal exception requires the original and reversal functional currencies to agree
 with the entity before granting the exact-reversal exception. A NULL header
 functional currency inherits the entity currency; an explicit mismatch or missing
 entity currency fails the permission check. Equal numeric amounts alone do not
 establish a valid reversal across currencies. Activation review uses this same
-check and old proposals must be regenerated after installation. No policy or aging
-membership is activated by this migration.
+check.
 
-### Audited residual write-off permission (unreleased, migrations 692–694)
+### Audited residual write-off permission
 
-For an entity with reviewed ordinary-journal enforcement enabled,
-`reconciliation.write_off_item` can now post a same-currency residual against the
+For an entity with the ordinary-journal policy enabled,
+`reconciliation.write_off_item` can post a same-currency residual against the
 invoice's booked AP/AR control account. The database validates the existing applied
 settlement, completed run in the same entity/scope, posted unreversed payment and
 invoice, matching party, entity currency, configured limit, remaining invoice amount
@@ -1344,43 +1346,39 @@ settlement together. Caller metadata or direct receipt insertion cannot grant
 permission. Changing a permitted journal invalidates its permission; use supported
 reversal/correction workflows rather than editing the receipt.
 
-This exception currently supports `AP_PAYMENT`/`AR_PAYMENT` against the matching
+This exception supports `AP_PAYMENT`/`AR_PAYMENT` against the matching
 invoice type. It does not authorize FX, credit-memo/prepayment/refund/card-funded
 write-offs, multi-control allocations or arbitrary control-account corrections.
-Those routes require their own evidence and permission work before entity activation.
-Existing journals receive no automatic receipts. Installation leaves entity policy
-and live aging membership unchanged.
+Existing journals receive no automatic receipts.
 
 The gateway dates the adjustment at the later document date and still refuses a
 closed period. The shared writer records header `functional_amount` equal to the
 functional GL debit total it books; this does not introduce currency conversion.
 
-### Full-settlement FX permission (unreleased, migration 695)
+### Full-settlement FX permission
 
-A separate database-validated exception now covers a first full AP/AR payment
+A separate database-validated exception covers a first full AP/AR payment
 and invoice settlement across document currencies. Both documents must use the
 same active controlled account and party; the exact journal clears their booked
 functional difference against a canonical P&L counterpart. Account names and
 `is_reconcilable` do not grant this exception. The immutable FX receipt and final
 settlement are checked atomically. Partial allocations, previously applied
 documents, other funding routes and historical backfills remain outside this
-permission. Installation does not activate entity enforcement or change aging
-membership. Review required routes before activating an entity.
+permission.
 
-### Owner contributions (requires migration 735)
+### Owner contributions
 
 Use equity subtype `owner_contributions` for contributed reserves, excluding share capital,
 share premium, OCI, shareholder loans and distributions. Its cash-flow classification is
 financing on the equity line; a noncash equity transfer produces no cash flow or P&L.
 Adding the catalog entry does not reclassify existing accounts. Obtain approval for an existing
 account change after rehearsing historical reports and any source-bound review invalidation.
-Migration 735 is applied in production; application deployment is pending. Check tool availability before submitting this subtype.
 
-## Account and reporting-decision observability (deployed 2026-10-14)
+## Account and reporting-decision observability
 
-Migration 737 exposes `master_updated_at` and `entity_updated_at` on account reads.
+Account reads expose `master_updated_at` and `entity_updated_at` on account reads.
 `updated_at` is the later timestamp; `updated_by` follows that source (master wins
-on equal timestamps). An old override timestamp no longer masks a master update.
+on equal timestamps). An old override timestamp does not mask a master update.
 No stored timestamps are rewritten.
 
 `query(entity_type="reporting_decision", filters={"legal_entity_id": ENTITY,
@@ -1403,9 +1401,7 @@ entries. Existing workflow history remains the record for earlier changes.
 
 ### New-company manual-journal default
 
-Migration 738 and the matching PR328 application changes are deployed and verified.
-Company/legal-entity creation can resume.
-The database now ensures each newly inserted legal entity receives enabled manual-journal
+The database ensures each newly inserted legal entity receives enabled manual-journal
 permission enforcement in the same transaction as creation. This includes the
 onboarding wizard, the normal legal-entity workflow, and future tenant clones.
 The receipt identifies `new_entity_default_v1`, the entity and database actor;

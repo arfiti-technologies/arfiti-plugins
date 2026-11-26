@@ -2,10 +2,9 @@
 
 This guide covers the unified reporting system in AI-Native ERP.
 
-## Correctness rollout status
+## Report contract
 
-Shared report tools return `report_v1` after migration 630 and the matching server
-release. Deployment is separate from code availability. For exact, nullable responses,
+Shared report tools return `report_v1`. For exact, nullable responses,
 use `report_contract: 1` on supported reports, or `asset_register` / `budget_actual`.
 Read currency, requested/effective dates, quality and coverage before interpreting
 numbers. Money is a decimal string; null means unavailable, not zero. Reconciliation booleans are also null when unavailable; a successful request does not certify its figures. Follow
@@ -173,15 +172,15 @@ a demonstrated control difference remains blocking.
 GL reports include both original and reversing journals at their own dates.
 Filtering out reversed originals while retaining reversals creates a false balance.
 
-After migration 921, a plain same-functional-currency payment or credit application
+A plain same-functional-currency payment or credit application
 can accompany a verified native carrying receipt in dated AP/AR aging. The server
 verifies both posted journals, source capacity, dated application and party/entity
 scope before adding the one-to-one amount. It does not guess a foreign carrying
 release. A 1,200 invoice less 700 cash and 100 credit can therefore show 400 when
 that evidence passes; the 800 applied total is not 800 cash. Unapply/reversal dates
 remain effective-dated. Missing or inconsistent evidence still withholds balances
-and authoritative totals. Rerun after the approved migration; do not edit posted
-records or application history merely to obtain a passing aging report.
+and authoritative totals. Do not edit posted records or application history merely
+to obtain a passing aging report.
 A valid simple source split across a receipt-backed invoice and an ordinary invoice
 without receipts remains outside this bounded calculation: its source balance and
 authoritative totals are withheld even if one invoice balance is explainable. Report
@@ -588,9 +587,9 @@ are distinct from report eligibility and reviewed dispositions. `unsupported` an
 `error` checks are unresolved, not zero defects. `checks_clean` covers only the
 implemented checks; `production_acceptance` remains false. Continue to interpret
 each report's quality and nullable amounts independently. Never present an audit
-as authorization to repair or as proof of a production release.
+as authorization to repair.
 
-## Dimension conditions (backend rollout)
+## Dimension conditions
 
 For supported exact reports, supply `report_contract: 1` and `dimension_filter`:
 `{"conditions":[{"dimension_type_id":1,"operator":"is_any_of","value_ids":[10]}],"connectors":[]}`.
@@ -599,9 +598,9 @@ descendants. Operators: `is_any_of`, `is_none_of`, `is_empty`, `is_not_empty`; A
 binds before OR. Negative membership includes untagged lines. Never drop an invalid
 filter, replace it with an empty selection, or combine it with `dimension_value_code`.
 
-The current branch implements ledger/TB, statements/trend, cash, AP/AR aging, assets,
-sales tax and budget actuals, with controls on the eleven report pages. Unsupported
-types reject the filter. Deployment requires migrations 649–656 and matching server code.
+Supported reports: ledger/TB, statements/trend, cash, AP/AR aging, assets, sales tax
+and budget actuals, with controls on the eleven report pages. Unsupported types reject
+the filter.
 Read `details.dimension_selection`: aging uses full document balances after all
 dated payments; cash flow uses whole transactions. These selections are non-additive
 and do not certify a dimensional control/cash bridge. Cash position uses tagged
@@ -610,7 +609,7 @@ compares selected lines only, not the whole entity. Keep the same request and cu
 for later pages and exports.
 
 
-### Extended dimension selection (branch implementation, not deployed)
+### Extended dimension selection
 
 Exact-contract asset, sales-tax and budget reports accept the same strict
 `dimension_filter`. Read `details.dimension_selection`: asset selection uses current
@@ -618,23 +617,22 @@ assignments; tax selects whole linked components, including evidenced reversals;
 budget actuals intersect stored scopes, while partially selected budgets remain
 unallocated. Preserve nulls and disclose non-additivity where indicated. Retained CSV
 exports include selection metadata even for empty results. Report-page controls preserve selections through comparisons, paging, browser
-navigation and statement-to-GL links. Representative release performance verification
-remains open. No production rollout is claimed.
+navigation and statement-to-GL links.
 
 
-The optional database identity certificate (migrations 665–668) changes performance only.
+The optional database identity certificate changes performance only.
 Do not infer report completeness from certification: continue reading `quality` and
 all evidence gaps. Uncertified tenants run the full dimension evidence scan.
 Certification does not change AP/AR membership or dimension-selection semantics.
 
-Query-planning changes in the unreleased 669–670 follow-up do not alter this contract.
+Query-planning optimizations do not alter this contract.
 A dated application uses its latest effective history version, including undo and
 retargeting. Continue honoring server quality/evidence fields and selection disclosure.
-The subsequent 671 tax evidence probe preserves all completeness rules; a faster
+The tax evidence probe preserves all completeness rules; a faster
 incomplete response is still incomplete and must not be presented as certified.
 
 
-The unreleased ledger-hardening audit's `account_document_impacts` is a read-only
+The ledger audit's `account_document_impacts` is a read-only
 transition inventory, not a new report membership rule. Its whole-document balances
 come from the existing aging report. Never use the manual-only or mixed categories
 to subtract amounts from an aging report or claim that a scope change was applied.
@@ -642,11 +640,11 @@ Mixed/unresolved documents require reviewed historical treatment; incomplete sou
 reports withhold inventory amounts. No change to `is_reconcilable` is required.
 
 
-Account-policy migrations 672–673 add a shared calculation used by the impact audit.
+A shared account-policy calculation is used by the impact audit.
 `proposed_subledger_scope` is a proposal, not evidence of live aging membership.
 Inactive accounts retain resolvable history but cannot receive new postings under
 the proposed policy. Do not infer authorization from the helper or apply account flag
-changes as an ad hoc historical repair; entity-scoped activation remains planned.
+changes as an ad hoc historical repair; it does not change live aging membership.
 
 
 `preview_account_scope_transition.py` is an operator read-only review tool. A successful
@@ -663,18 +661,18 @@ back. Even `limited_checks_passed` has `activation_ready=false` and
 permanent integrity certificate. Incomplete/uncertified AP/AR reports require source
 review. Operator/environment authorization is required before running it.
 
-`guard_posting_accounts.py` is an unreleased operator tool for the narrower rule that
+`guard_posting_accounts.py` is an operator tool for the narrower rule that
 GL references cannot point to header/grouping accounts. Default mode audits only;
 installation requires environment authorization and a maintenance window. An installed
 guard also refuses turning a GL-referenced account into a header. This is not evidence
 that AP/AR scope has changed or that the ledger is otherwise complete. Preserve source
 gaps and existing report-quality disclosures. New clones need their own installation
 check and dimension recertification after this DDL; template trigger enforcement is
-not inherited in full. Never repair a refusal by deleting posted GL or toggling manual
-flags. Manual-entry enforcement and reviewed account transitions remain unfinished.
+not inherited in full. The guard is installed per schema, so it is not enforced
+everywhere. Never repair a refusal by deleting posted GL or toggling manual flags.
 
 
-The header-account guard now also checks populated posting-profile sides. Its aggregate
+The header-account guard also checks populated posting-profile sides. Its aggregate
 status can be incomplete while the earlier GL guard remains installed; use the
 per-reference operator evidence. Invalid existing profiles require configuration
 review, not a report adjustment or an automatic header/manual-flag change. Template
@@ -687,7 +685,7 @@ invoice, credit or payment no longer consume either document's open amount.
 Before that date the recorded application remains effective. This applies to AP
 and AR in both operational open-item queries and report snapshots. Ordinary
 unapply still takes effect when performed; the immutable application history is
-not rewritten. Rerun aging after migration 648 to obtain a fresh snapshot; an
+not rewritten. Rerun aging to obtain a fresh snapshot; an
 existing report snapshot retains its original result. Control mismatches and
 missing history remain explicit failures of certification.
 
@@ -721,11 +719,11 @@ card reclass). An ordinary undo is dated on the day it is done; a historical und
 date the reversal earlier. From that reversal's accounting date the settlement no
 longer consumes the bill, even when the match itself is recorded as voided later, on
 the day the undo was done. A re-match therefore counts once in an aging as of any
-date (migration 868). This applies to card settlements only; reversing a
+date. This applies to card settlements only; reversing a
 write-off or FX journal does not undo the payment it adjusts.
 
 
-Migration 685 adds operator-only before/after calculation via
+Operators can run a before/after calculation via
 `preview_account_scope_transition.py --compare-reports`. It selects all historical
 documents using canonical AP/AR subtype and effective `allow_manual_entries=false`;
 inactive control history stays visible and `is_reconcilable` is not a membership gate.
@@ -733,13 +731,13 @@ Confirmed manual-only documents leave the candidate; mixed/unresolved documents 
 an evidence gap. Current report source gaps also prevent candidate certification.
 `comparison_complete` is comparison evidence only: `apply_supported=false` and
 `membership_activated=false` remain. Live reports still use existing membership.
-Do not present candidate totals as deployed reports or alter flags to force a tie-out.
+Do not present candidate totals as live reports or alter flags to force a tie-out.
 
-For deployments including migration 691, new settlement history keeps later write-off
+New settlement history keeps later write-off
 and FX journals out of earlier aging dates. An application created with a later
 adjustment records both the application-only and adjusted states. Older captured
 history is unchanged and needs operator review where the adjustment predates its
-journal. Do not describe installation as historical repair or AP/AR scope activation.
+journal. This is not a historical repair or an AP/AR scope change.
 
 ### Month-end close evidence
 
@@ -751,7 +749,7 @@ coverage; settled invoices count for billing only when linked to the actual
 contract. AP/AR control lines are excluded from document tax validation. Bank
 statement differences and incomplete payroll settlements must still be resolved.
 
-### Dimension-selection labels (unreleased integration)
+### Dimension-selection labels
 
 MCP and dashboard use identical report labels. A control comparison that does not
 apply is labelled “Not compared for this selection”, covering both party and
@@ -759,7 +757,7 @@ dimension selection. Filter/contract refusals use explanatory sentences. Interna
 error identifiers remain diagnostic fields rather than user-facing replacement text.
 
 
-### Native carrying receipts in dated aging (unreleased, migration 700)
+### Native carrying receipts in dated aging
 
 Aging consumes exact functional allocations from native payment GL receipts after
 checking document/functional/reporting totals, currencies and dated application
@@ -769,8 +767,8 @@ If receipt/application evidence is inconsistent, respect the withheld balance an
 incomplete totals; request review rather than supplying an estimated amount.
 Entirely receiptless legacy payments keep the existing calculation; no legacy
 repair or agent partial-FX authority is implied. Live account membership, candidate
-activation rules and full-document dimension selection are unchanged. Rerun after
-deployment; immutable saved snapshots retain their original result.
+activation rules and full-document dimension selection are unchanged. Immutable saved
+snapshots retain their original result; rerun the report for a fresh one.
 
 
 ### GL display precision and totals
@@ -779,26 +777,23 @@ GL and Account activity retain every selected row in their snapshot. Displayed
 amounts use functional-currency precision; matching totals and running balances
 are calculated from unrounded ledger values first. Do not recompute server totals
 by adding rounded displayed rows. Search filters displayed lines after running
-balances are computed. Missing evidence keeps amounts unavailable. Migration 723
-changes formatting cost only, not eligibility, dimensions, signs or row coverage.
+balances are computed. Missing evidence keeps amounts unavailable. Formatting does
+not change eligibility, dimensions, signs or row coverage.
 
 
 ### Aging settlement-history extraction
 
-Migration 724 reduces repeated JSON extraction in the reporting AP/AR open-item
-helpers. The latest dated history, reversal exclusions, independent source/target
+The reporting AP/AR open-item helpers read typed settlement history. The latest dated history, reversal exclusions, independent source/target
 amounts and missing-basis rules remain authoritative. It changes no live aging
 membership, allocation evidence requirement or activation policy. Performance
 acceptance is separate from report equality; incomplete evidence stays incomplete.
 
 
-Migration 726 (unreleased) accelerates native receipt lookup using a partial GL
-index. It changes neither receipt validation nor eligibility, amounts or evidence
-gaps. Do not treat the presence of the index as accounting certification or full
-benchmark acceptance. Operators must follow the concurrent prebuild and post-DDL
-certification procedure in platform operations.
+Native receipt lookup uses a partial GL index. It changes neither receipt validation
+nor eligibility, amounts or evidence gaps. Do not treat the presence of the index as
+accounting certification.
 
-### Reviewed mixed-journal performance (migration 730; application rollout pending)
+### Reviewed mixed-journal performance
 
 A balanced ordinary journal can mix current-period income/expense and a separate
 retained-earnings adjustment. A privileged operator may explicitly confirm
@@ -816,7 +811,7 @@ cash-flow decisions are preserved. Do not use a closing-year decision to suppres
 this ambiguity: that would remove current-period P&L.
 
 
-### Account activity and general-ledger reconciliation (migration 731; production SQL verified 2026-10-12)
+### Account activity and general-ledger reconciliation
 
 For account activity and general-ledger detail, `details.reconciliation` checks
 opening balance + period debits - period credits = closing balance for each
@@ -828,11 +823,11 @@ blocking totals gap yields `unavailable`, never a false tie. Trial-balance
 reconciliation keeps its existing debit/credit rule. This arithmetic proof does
 not certify completeness or economic correctness of the underlying journals.
 
-## Account and reporting-decision observability (deployed 2026-10-14)
+## Account and reporting-decision observability
 
-Migration 737 exposes `master_updated_at` and `entity_updated_at` on account reads.
+Account reads expose `master_updated_at` and `entity_updated_at` on account reads.
 `updated_at` is the later timestamp; `updated_by` follows that source (master wins
-on equal timestamps). An old override timestamp no longer masks a master update.
+on equal timestamps). An old override timestamp does not mask a master update.
 No stored timestamps are rewritten.
 
 `query(entity_type="reporting_decision", filters={"legal_entity_id": ENTITY,
@@ -853,7 +848,7 @@ find it. This adds future audit entries; it does not fabricate missing historica
 entries. Existing workflow history remains the record for earlier changes.
 
 
-### Dashboard error guidance (QA branch)
+### Dashboard error guidance
 
 Shared list, report, account-activity and agent-settings fallback messages refer
 to your assistant, without prescribing Claude. Use the page’s assistant chooser
@@ -868,6 +863,6 @@ These copy changes do not certify incomplete results or change report refusal,
 retry, budget creation or permission behavior.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Close evidence
 
-Close financial sums use the reporting ledger eligibility view, including applicable reviewed dispositions. A posted timestamp alone is not eligibility. Dated original/reversal pairs remain in historical balances, except a reviewed canceled journal and its reversal that an operator excluded together (`report_disposition.py --canceled-journal-pair`, AR-1389): those are in no balance on any date, because the review found the journal should not have been posted; live settlement additionally needs an unreversed eligible document. Structural checks still inspect retained invalid journals. This can change a close result in either direction; require the deployment impact preview.
+Close financial sums use the reporting ledger eligibility view, including applicable reviewed dispositions. A posted timestamp alone is not eligibility. Dated original/reversal pairs remain in historical balances, except a reviewed canceled journal and its reversal that an operator excluded together (`report_disposition.py --canceled-journal-pair`, AR-1389): those are in no balance on any date, because the review found the journal should not have been posted; live settlement additionally needs an unreversed eligible document. Structural checks still inspect retained invalid journals.

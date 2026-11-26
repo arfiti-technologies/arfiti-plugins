@@ -10,7 +10,7 @@ Legacy payment-pass descriptions below apply to non-card AP/AR behavior. Card ro
 
 # Transaction Processing
 
-> **MSEO release contract:** Posting freezes resolved line dimensions before approval. Defaults cannot reclassify approved lines, and reversal copies the original assignments and provenance. New dimension writers must use the shared typed boundary. See the dimensions-management resource for assignment, approval and compatibility rules.
+> **MSEO contract:** Posting freezes resolved line dimensions before approval. Defaults cannot reclassify approved lines, and reversal copies the original assignments and provenance. New dimension writers must use the shared typed boundary. See the dimensions-management resource for assignment, approval and compatibility rules.
 
 This resource explains how to post transactions in the AI-Native ERP system using the V5 unified ledger.
 
@@ -922,13 +922,13 @@ fiscal_period_id is required | Current period: ID 45 (2025-01, 2025-01-01 to 202
 
 ### AR invoice due dates
 
-**Local AR-187 persistence correction (unreleased):** new customer invoice
-postings save the already-resolved `invoice_date` separately from accounting
+New customer invoice postings save the already-resolved `invoice_date` separately from accounting
 `transaction_date` and `due_date`. If one of invoice/accounting dates is omitted,
 the existing resolver mirrors the supplied date; payment-term precedence below
 is unchanged. Linked customer credit memos reuse this header writer and preserve
-their own resolved document date too. No existing document dates are backfilled;
-recovering missing historical dates requires independently verified evidence.
+their own resolved document date too. Older documents without a stored invoice date
+are not backfilled; recovering missing historical dates requires independently
+verified evidence.
 
 For `transaction.post` with `AR_INVOICE`, a supplied `due_date` wins. Otherwise
 choose `payment_term_code` from the payload, then the customer's effective
@@ -1514,7 +1514,7 @@ own evidenced cash lifecycle and must not be inferred as invoice payments.
 Schema discovery combines validator field types with organization-required header fields. Inspect workflow_requirements for conditional transaction-type, line and identifier rules. A generic optional field can be mandatory under the company's workflow policy. Payment reversal application history uses the GL reversal date after migration 624; historical records captured before that fix require audited recovery.
 
 
-### Existing transaction authorization (2026-09-30)
+### Existing transaction authorization
 
 Update, reverse, cancel and delete require write authority for the document's
 stored domain: AP/expense → `ap:write`, AR → `ar:write`, payroll → `payroll:post`,
@@ -1543,7 +1543,7 @@ request. Ordinary cancellation has no sanctioned escape through closed-period
 DB guards. Historical posted voids require separate reviewed repair evidence.
 
 
-### Customer credit and invoice references (PR #224, October 2026)
+### Customer credit and invoice references
 
 `transaction.post` supports `AR_CREDIT_MEMO` with a required `original_transaction_id`,
 customer credit `reference_number`, the original customer/entity/currency, dates,
@@ -1587,7 +1587,7 @@ from the other. Existing posted receipts are not retagged by the fix. Correct th
 only through the supported reversal and replacement workflow after reviewing their
 applications.
 
-### Explicit AP/AR partial carrying-value allocation (unreleased hardening)
+### Explicit AP/AR partial carrying-value allocation
 
 Partial AP payments and AR receipts release booked functional and reporting carrying amounts
 using the evidenced remaining balance and each currency's configured precision. The last
@@ -1595,14 +1595,13 @@ payment releases the remaining booked balance; no new FX rate is guessed for
 that release. Incomplete/non-finite GL components, currency disagreement and
 amounts incompatible with the currency precision are refused for review.
 
-The allocator also checks actual GL storage scales. Current two-decimal columns
-cannot preserve a three-decimal currency, so that case is refused until a
-storage/writer migration is completed. This is not a claim of three-decimal
-posting support. Outstanding revaluations and historical foreign applications
+The allocator also checks actual GL storage scales. Two-decimal columns cannot
+preserve a three-decimal currency, so that case is refused; three-decimal posting
+is not supported. Outstanding revaluations and historical foreign applications
 without supported carrying evidence still require their existing review paths.
-This does not extend agent FX permissions to partial applications or activate aging.
+This does not extend agent FX permissions to partial applications or change aging.
 
-### Historical invoice settlement routing (unreleased hardening)
+### Historical invoice settlement routing
 
 Native AP payments and AR receipts with explicit invoice applications resolve the
 control from the original invoices' booked GL, rather than the current posting
@@ -1622,7 +1621,7 @@ Incomplete, ambiguous or unbalanced booked control evidence is refused. Concurre
 receipts cannot consume the same remaining invoice balance twice.
 
 Both native AP and AR applications persist explicit source document consumption and
-the allocated target functional amount. AR foreign receipts now use the shared
+the allocated target functional amount. AR foreign receipts use the shared
 remaining carrying-value calculation, with gain/loss lines for the difference
 between bank and invoice carrying amounts. FX lines preserve party, project and
 dimensions and require one unambiguous profile with active P&L counterparts. Missing
@@ -1631,7 +1630,7 @@ the existing supported workflow. This does not repair old application evidence,
 extend agent partial-FX permissions, support active revaluation allocation, permit
 multiple controls within one source invoice, or change live AP/AR aging membership.
 
-New native AP/AR invoices and unapplied payments now share control-profile resolution.
+New native AP/AR invoices and unapplied payments share control-profile resolution.
 An explicit transaction-type link uses its transaction direction (AP invoice credit,
 AP payment debit, AR invoice debit, AR payment credit). A generic vendor profile uses
 its payable credit side; a generic customer profile uses its receivable debit side,
@@ -1675,7 +1674,7 @@ functional amount may use the full document amount, subject to current capacity.
 The check requires a caller transaction, posted dates, document currencies and a
 finite nonnegative invoice balance. This validates capacity only: explicit source
 amounts do not grant partial FX journal permission or prove source/target functional
-carrying allocations. Those permissions and their audited legacy repair remain open.
+carrying allocations.
 
 Before native foreign-currency carrying release or agent FX settlement, relevant
 posted currency revaluations must be cleared as of the settlement date. A linked
@@ -1688,7 +1687,7 @@ future revaluation does not block this dated check. The agent's database permiss
 independently checks the same evidence. This refuses unsupported carrying-value
 cases; it does not calculate revalued partial allocations or authorize a repair.
 
-Supported revaluation and settlement writers now coordinate per tenant and legal
+Supported revaluation and settlement writers coordinate per tenant and legal
 entity. Native AP/AR payment posting, agent invoice application, manual invoice
 matching and shared unapply take a shared transaction lock; the native revaluation
 writer takes the exclusive counterpart before reading open items. Concurrent
@@ -1700,7 +1699,7 @@ supported transaction. The lock lasts through the caller transaction's commit or
 rollback. This coordinates the named application routes; it is not a database-wide
 guard against direct SQL, connector/import writers or every historical mutation.
 
-The same revaluation boundary now covers native AP/AR invoices and their credit-memo
+The same revaluation boundary covers native AP/AR invoices and their credit-memo
 subclasses, historical invoice updates, shared transaction reversal, importer direct
 posting and importer GL backfill. Reversal of a revaluation takes the exclusive
 side; ordinary reversals share the settlement side. Backfill rechecks entity/type
@@ -1714,7 +1713,7 @@ replaced by re-import. A skipped duplicate alone is not evidence of source compl
 Connector application replay delegates to the coordinated manual match/unmatch
 workflows. These locks do not certify every arbitrary SQL or operator repair path.
 
-### Native partial-payment reversals and carrying receipts (unreleased)
+### Native partial-payment reversals and carrying receipts
 
 An earlier instalment may be reversed while later instalments remain. Subsequent
 native AP/AR payments use the surviving applications' actual carrying releases,
@@ -1732,8 +1731,7 @@ from the actual control GL; ambiguous multi-invoice foreign allocations require
 review. Same-currency historical amounts retain their exact one-to-one basis.
 
 This receipt is native settlement evidence, not an agent controlled-adjustment
-permission or a repair of historical application records. Partial agent FX, reviewed
-legacy repair and coordinated aging activation remain separate unfinished work.
+permission or a repair of historical application records.
 
 ### Typed parties on manual journal lines
 
@@ -1752,7 +1750,7 @@ later dimension journal does not change payroll's stored source snapshot.
 Review account/party/dimension nets before considering historical repair complete.
 
 
-### US GAAP posting defaults (unreleased ledger-integrity branch)
+### US GAAP posting defaults
 
 New US GAAP charts include active posting accounts 6990 General Operating Expenses
 and 6590 General Depreciation Expense. Vendor, operating expense, purchase sales-tax
@@ -1767,16 +1765,16 @@ active, non-header accounts before updating them through the audited configurati
 route. Onboarding continues to report a setup gap for invalid account references.
 
 
-AP/AR invoice account checks (unreleased): preflight checks explicit line accounts
+AP/AR invoice account checks: preflight checks explicit line accounts
 and item-derived expense/revenue accounts against the entity's active, non-header
 accounts. Execution independently checks the resolved line and AP/AR control accounts.
 A grouping header cannot receive an invoice posting. Correct the line, item default
 or posting profile to an appropriate posting account; do not change a header into
 a posting account to bypass the error. `allow_manual_entries=false` does not bar
-native invoice control posting, and this change does not activate aging membership.
+native invoice control posting, and these checks do not change aging membership.
 
 
-### Agent application currency precision (unreleased ledger hardening)
+### Agent application currency precision
 
 Before applying an AP/AR invoice match, the agent checks invoice-currency applied
 amounts, payment-currency consumption and any matched functional amount against the
@@ -1788,11 +1786,11 @@ uses the entity currency; an explicit mismatch requires review.
 
 Correct the proposed amounts or missing currency configuration from source evidence.
 Do not reduce a currency's configured precision to bypass a storage refusal.
-Three-decimal support requires a coordinated monetary-storage and writer migration;
-widening one column is not release approval. These checks establish representability; foreign applications also require booked
-carrying evidence. Live aging membership is unchanged.
+Three-decimal currencies are not supported. These checks establish representability;
+foreign applications also require booked carrying evidence. Live aging membership is
+unchanged.
 
-### Foreign partial allocations (unreleased)
+### Foreign partial allocations
 
 Standard AP/AR payment-to-invoice applications through agent matching, manual matching
 and reviewed-proposal confirmation use SQL-verified independent source and target
@@ -1811,11 +1809,11 @@ outstanding revaluation require operator review.
 Undo retains dated evidence and restores capacity; it cannot backdate restored capacity
 before the application. A new application gets a new receipt. Neither this mechanism nor
 FX evidence capture activates ordinary-journal policy or changes live aging membership.
-The operator-only preview and migration 701 proposal records remain read-only evidence
-from the agent's perspective; `apply_authorized=false` is not posting permission.
+The operator-only preview and its proposal records are read-only evidence from the
+agent's perspective; `apply_authorized=false` is not posting permission.
 
 
-### Reviewed invoice-default changes (unreleased)
+### Reviewed invoice-default changes
 
 An operator may approve an exact AP/AR invoice-default cutover through the audited
 transition procedure. This is not an agent permission to edit used account settings or
@@ -1833,24 +1831,24 @@ Linked/party-specific defaults and date-versioned classification remain outside 
 narrow procedure. A backdated new invoice still uses the current creation-time default.
 
 
-Migration 710 adds a separate operator-reviewed linked-invoice cutover. A unique
+A separate operator-reviewed linked-invoice cutover exists. A unique
 invoice link may select a replacement control while a separate fallback default stays
 unchanged. This does not authorize an agent to edit profiles or links. Shared payment
 profiles, competing invoice links and party-specific references remain unsupported.
 Apply the original-booked-control rule to payments after either kind of cutover.
 Native AP/AR credit memos also keep their source invoice's booked control and currency
 basis, even after the invoice profile changes. Do not use today's default or rate to
-redirect a credit. Migration 711 adds a separate operator-reviewed operation for profiles
+redirect a credit. A separate operator-reviewed operation covers profiles
 shared only by the matching invoice and credit-memo types. This grants no agent permission
 to edit profiles or remove links. Debit-memo, recurring, payment and party-specific links
-remain outside that operation; connector mapping certification is separate work.
-Migration 712 adds a separate operator-only transition retaining matching dormant
+remain outside that operation; connector mappings are not certified by it.
+A separate operator-only transition retains matching dormant
 debit-memo links and customer RECURRING_INVOICE links. It refuses retained transactions
 of those codes or a newly registered executor. Ordinary recurring billing posts AR_INVOICE.
 Do not delete links to satisfy a proposal, reroute old balances, or treat this as permission
 to post new debit memos. Party/payment references and connector mappings remain separate.
 
-### Ordinary-journal activation evidence freshness (unreleased)
+### Ordinary-journal activation evidence freshness
 
 Operator activation proposals bind settlement items/runs, controlled permission receipts
 and applicable configuration rows as well as ledger/account evidence. A changed write-off
@@ -1865,9 +1863,9 @@ helper blocks readiness. Operator DDL and consumers must be quiesced during appl
 cannot treat table locks as protection against concurrent owner-level function changes.
 
 
-### Reviewed entity control setup before first financial use (unreleased)
+### Reviewed entity control setup before first financial use
 
-Migration 713 provides an operator-only reviewed path to set an existing entity AP/AR
+There is an operator-only reviewed path to set an existing entity AP/AR
 account's manual-entry override to false before retained financial activity. It preserves
 the shared master account and other entity settings and does not activate journal policy
 or change live aging membership. An agent cannot approve/apply this configuration change,
@@ -1876,7 +1874,7 @@ may be excluded. Historical entities still need their own reviewed transition. O
 posted documents and original booked-control settlement rules remain unchanged.
 
 
-### Retired-account history review (unreleased)
+### Retired-account history review
 
 Activation preparation includes `evidence.historical_review`: candidate/blocked
 counts and per-journal fingerprints, retired account IDs and reasons. A candidate
@@ -1884,12 +1882,12 @@ is only structurally suitable for exact historical review, not a posting permiss
 or evidence of original authorization. All existing activation blockers remain.
 Do not reactivate old accounts, change manual-entry flags, copy a candidate fingerprint
 into transaction metadata, or infer that historical permission or aging activation
-was granted. A narrow operator-only retired-journal permission path is described below; broader historical transitions remain unfinished.
+was granted. A narrow operator-only retired-journal permission path is described below.
 
 
-### Reviewed retired-journal receipts (unreleased)
+### Reviewed retired-journal receipts
 
-Migrations 716–720 add private immutable historical journal receipts. Operators use
+Historical journal receipts are private and immutable. Operators use
 `review_historical_journals.py` with explicit journal IDs, an exact proposal hash,
 a review reference/reason, `preserve_exact_retired_journals` treatment and confirmed
 consumer quiescence. The tool does not activate journal policy or AP/AR aging.
@@ -1914,7 +1912,7 @@ override or activate aging from the packet. `apply_supported` and `activation_re
 remain false. Live aging continues to use its existing membership.
 
 
-An operator-only `review_historical_account_policy.py` path now supports a narrow
+An operator-only `review_historical_account_policy.py` path supports a narrow
 used-control restriction with treatment
 `preserve_native_subledger_history_and_live_aging`. It changes one existing entity
 manual-entry override only after exact review and a locked evidence recheck. Posted
@@ -1926,7 +1924,7 @@ and header dimensions, with every assignment scoped to the selected entity.
 Matching cross-entity dimensions do not qualify. This does not authorize a reversal of an otherwise unsupported
 journal, restore a void, or infer missing evidence from descriptions. Both live
 aging reports must be complete/certified at the explicit review date and unchanged
-after apply. Ordinary-journal policy remains dormant; aging membership is unchanged.
+after apply. This path does not activate ordinary-journal policy; aging membership is unchanged.
 Do not use a read-only history packet as this operation's approval, invoke it from
 an application role, or interpret the flag update as coordinated activation.
 
@@ -2001,21 +1999,20 @@ authorization verification remains false. Policy/aging activation and accounting
 corrections stay separate. A stale packet needs fresh preparation and review.
 
 
-Exact historical settlement receipts (721, unreleased): a distinct operator CLI
+Exact historical settlement receipts: a distinct operator CLI
 `review_historical_settlement_permissions.py prepare/apply` accepts fresh permission
 proposals and explicit per-journal retention/authorization/classification decisions.
 The read-only review packet cannot be passed as an apply proposal. Apply also needs
 a direct owner connection, confirmed quiescence, current locked evidence and private
 immutable guards; it grants no prospective write-off/FX permission and enables no
 policy or aging scope. Never fabricate the human decisions or infer them from current
-limits. Successful apply pins original accounting immediately. With migration 722,
-native unmatch or payment reversal can undo the whole settlement and reverse its
+limits. Successful apply pins original accounting immediately. Native unmatch or payment reversal can undo the whole settlement and reverse its
 adjustment together. The database requires exact opposite GL, preserved dimensions,
 restored balances and matching dated application history. Manual undo uses entity
 business date; payment reversal and adjustment undo share the selected reversal date.
 Closed periods refuse, and reversing the adjustment alone is not sufficient. Keep
 the immutable original receipt: a later match needs its own evidence and adjustment
-authorization. Broader correction/supersession remains unfinished. Do not disable
+authorization. Broader correction or supersession of a receipt is not supported. Do not disable
 guards, delete a receipt or toggle the old application back to applied. Use identical
 retries only after inspecting an uncertain result. Ordinary-journal activation and
 coordinated AP/AR activation remain separate reviews.
@@ -2029,15 +2026,7 @@ create substitute receipts, waive report gaps or treat recognition as activation
 a fresh reviewed operator proposal is required for any account-setting transition.
 
 
-## Historical transition development notes — superseded rollout status
-
-The following dated development notes preserve proof semantics and earlier review
-boundaries. Their “local”, “not deployed”, “policies disabled” and September-hold
-statements describe the earlier checkpoint, not current production status. PR361
-and PR370 delivered these supported paths. PR370's current verified status is in
-“Reviewed canceled and corrected journals” below. Do not replay the earlier steps.
-
-Existing-control review refinement (local, not deployed): keep advisory warnings in
+Existing-control review: keep advisory warnings in
 `review_historical_account_policy.py` evidence. Only the explicit known warning codes
 listed in platform operations are advisory; incomplete/uncertified aging, blocking
 or unknown disclosures still refuse. If `evidence.retained_party_evidence_pairs` is
@@ -2047,38 +2036,21 @@ acknowledgment, fill historical party fields, infer payment links from descripti
 or change paid amounts to make readiness pass. Source hashes and all financial/tax/
 dimension checks remain binding. This is not a general historical-data repair route.
 
-
 Existing retired-journal permissions may be composed into a prospective account
 restriction only while their accounting snapshots and required database guards
 remain valid. This does not create a permission from age, rewrite the historical
-entry, or activate the company policy. The local transition refinement remains
-undeployed pending review and production approval.
+entry, or activate the policy.
 
-
-Additional local transition proofs (not deployed) recognize exact reciprocal
+Transition proofs also recognize exact reciprocal
 canceled journal/card adjustments only when no active allocation remains; existing
 latest report exclusions only while header/ledger fingerprints and immutable guards
 remain valid; and full foreign-currency bills settled by functional-currency cards
 only with exact document/source units, carrying values and supported FX legs.
 These are read-only evidence checks, not permission to edit history or renew a
 report decision. Partial/composite settlements, conflicting tax metadata, invalid
-chronology and incomplete aging remain blocked. Disposable-copy payment/header
-repairs and append-only current-date history corrections are separate proposals;
-they are not an automatic production repair capability.
+chronology and incomplete aging remain blocked.
 
-
-Local repair planning also distinguishes omitted reversal metadata from conflicting
-values. Unique source-line correspondence and unchanged booked amounts are required;
-nonzero-line currency gaps need a separate review. The planner does not write data.
-The disposable apply rehearsal uses existing mutation guards and audit context, and
-is not production authorization. Restoring historical tax metadata requires separate
-tax-impact review before any production application. A stored FX-card difference is
-accepted only if zero/unpopulated or exactly the independently proved functional
-cash/carrying variance; the booked FX leg must still match. Unresolved dated source
-conflicts and deferred-period corrections remain activation blockers.
-
-
-Local settlement proof refinement (2026-10-15; not deployed): a fully paid
+A fully paid
 same-currency invoice may be settled by multiple fully consumed cards only when
 **every active leg** independently proves its journal, source amounts, account and
 dimension classification, and chronology. All legs must sum exactly to the bill;
@@ -2087,14 +2059,6 @@ approve an arbitrary partially paid bill, mixed-currency family, refund or compo
 correction. Full foreign-card proofs keep document units separate from functional
 carrying amounts and require exact existing FX legs.
 
-Private copied-data date/link proposals remain separate from these read-only proofs.
-Moving a clearing or reversal accounting date can change interim-period reports even
-when full-month P&L is unchanged. Actual creation/posting timestamps are retained.
-Normalizing a negative credit into an equal positive debit preserves signed balances
-but changes gross debit/credit presentation; verification must not claim all trial
-balance totals or GL columns are unchanged. Source-document conflicts and missing
-refund/deposit evidence stay blocked rather than being cleared by date inference.
-
 A separate partial-source proof recognizes one fully paid same-currency bill cleared
 from a larger card expense. It requires exact bill/AP/journal amounts, sufficient
 source amount, matching source classifications and no competing active allocation.
@@ -2102,13 +2066,12 @@ The evidence explicitly reports the unallocated source amount. It neither proves
 refund nor removes the residual expense, and it does not certify the whole card
 charge as settled. This recognition changes no booked amounts or P&L.
 
+### Retained historical dates
 
-### Retained historical dates — revised review boundary, 2026-10-15
-
-The current proposal keeps existing accounts and journal dates. Earlier private
-experiments moving consolidated clearing/reversal dates or normalizing a signed
-credit solely to satisfy a checker are **withdrawn as production proposals**.
-Historical presence on a control account does not by itself establish an error.
+Historical account transitions keep existing accounts and journal dates. They do not
+move consolidated clearing/reversal dates or normalize a signed credit solely to
+satisfy a check. Historical presence on a control account does not by itself
+establish an error.
 
 A fully proved, fully paid same-currency split-card family may contain clearing
 entries preceding the final consolidated invoice. The platform retains and discloses
@@ -2121,17 +2084,7 @@ calculations. Clearing before its card source, a future invoice beyond the revie
 date, incomplete/mixed allocations, changed evidence and missing source review still
 refuse. A single cross-month payment match is not automatically treated as a deposit.
 
-A fresh disposable copy excluding the earlier date-shift experiments recognizes the
-source-supported consolidated families while preserving all compared source rows and
-report totals. Remaining evidence/report blockers stay open and both company policies
-remain disabled. Genuine proposed errors are listed separately in the private review
-packet: proven missing links, crossed monthly matches and denomination/variance data
-mismatches. Missing sources and chronology alone are not labeled accounting errors.
-No production application, push or deployment is authorized by this rehearsal.
-September and dependent corrections remain deferred.
-
-
-Further local evidence refinement (2026-10-15, not deployed): the card-settlement
+The card-settlement
 writer stores source currency in `reconciliation_items.currency`; the FX historical
 proof accepts that label or the older functional-currency label only while explicit
 source/target currencies and booked units independently match. A populated functional
@@ -2142,17 +2095,8 @@ An applied `dismissed` review marker does not compete with a real allocation onl
 when its target id/type and variance journal are absent, variance status is `none`,
 and applied/source-applied/functional-matched/difference amounts are null or zero.
 Any financial content keeps it a competing row. No marker is deleted or rewritten.
-Tests cover each financial field independently, wrong currencies and wrong units.
 
-Two copied document-unit/functional-unit metadata mismatches and their linked run
-summaries were corrected in a guarded private rehearsal. Journal headers, dates,
-ledger rows, accounts and periods were unchanged. Existing corrective journals must
-be included before suggesting any additional accounting correction; a residual in
-an isolated leg is not proof that the complete chain is wrong. Other classification
-and chronology differences remain investigation items, not presumed accounting errors.
-
-
-### Retained FX and signed-tax evidence — local verification, 15 October 2026
+### Retained FX and signed-tax evidence
 
 Historical FX proof accepts an existing `adjusted` variance label only with the
 same exact booked source, target, amount, currency and journal proof required for
@@ -2162,19 +2106,9 @@ one-sided, matching document/functional signs. Other negative or multi-sided
 components remain refused; balancing and exact settlement checks still apply.
 No stored line is normalized, and prospective posting validations are unchanged.
 
-The affected regression suite passed 178 tests, including missing tax codes,
-wrong account classes, inconsistent functional signs and incorrect adjusted
-variance amounts. Fresh disposable preparation recognizes two additional valid
-historical FX chains. Compared journal headers/dates, GL and period fingerprints,
-P&L, balance-sheet and trial-balance totals remain unchanged. Both company
-activations still fail closed on remaining evidence/report prerequisites. This is
-local verification only, not a completed transition or production approval.
-September and dependent corrections remain deferred.
+### Existing same-currency settlement variances
 
-
-### Existing same-currency settlement variances — local only
-
-Read-only transition proof now covers an already-booked full same-currency card
+Read-only transition proof covers an already-booked full same-currency card
 settlement with a separate variance leg. Document and functional amounts must agree
 for both source and invoice; the recorded difference must equal their exact
 carrying difference. AP relief, the full source-expense reversal, the signed
@@ -2185,15 +2119,10 @@ reclassified or recommended for new postings.
 
 Evidence is exposed separately as
 `verified_full_same_currency_variance_settlements`. Independent report certification
-still gates the transition even when this evidence passes. The fresh private
-rehearsal recognized eight additional chains without changing any stored journal,
-date, ledger line or report total. Both company activations remain blocked by
-other evidence/report prerequisites. This is not deployed; production and September
-remain untouched. Earlier-dated cancellations use the separate retained-history
+still gates the transition even when this evidence passes. Earlier-dated cancellations use the separate retained-history
 proof described below; replacement invoices alone do not authorize accepting them.
 
-
-### Refunded card sources — local proof, not deployed
+### Refunded card sources
 
 `verified_refunded_card_settlements` proves one complete same-currency chain:
 posted charge, posted refund linked to that charge, fully settled AP invoice, and
@@ -2206,13 +2135,9 @@ No refunds, journals, dates, classifications or historical permissions are creat
 by this proof. No small-difference tolerance or new posting permission is added.
 
 The new evidence is included in transition preparation and its source fingerprints;
-report certification remains an independent blocker. Six additional complete chains
-were proved on the private disposable copy with no accounting changes or P&L impact.
-Both existing-company activations remain blocked on other history/report evidence.
-No production action is approved by these results; September remains deferred.
+report certification remains an independent blocker.
 
-
-### Retained cancellation before a future invoice date — local proof, not deployed
+### Retained cancellation before a future invoice date
 
 Historical account-transition preparation can separately prove an already-posted
 invoice cancellation whose accounting date precedes the invoice date. Both dates
@@ -2232,13 +2157,7 @@ reference is retained in the audited reason. This does not certify the interim
 period's presentation or waive any independent report-certification blocker.
 No journals, dates, amounts, reporting decisions or settlement links are changed.
 
-The private rehearsal recognizes the retained cancellation pair without redating it.
-AR control history now has no unsupported lines, but AP report evidence still blocks
-its transition. Other settlement history remains unresolved in both companies;
-neither company policy has been activated. September remains deferred.
-
-
-### Single full advance clearing and AP diagnostics — local only
+### Single full advance clearing and AP diagnostics
 
 `verified_single_advance_card_settlements` uses the exact settlement-family proof
 for a single fully applied, same-currency card charge whose clearing precedes its
@@ -2251,20 +2170,13 @@ and a source reference. This is not authorization to post a new early clearing o
 an assertion that interim expense presentation was correct. Unproven/mixed-source
 families remain blocked.
 
-Private historical transition proposals now retain the report's `control_tie_out`,
+Private historical transition proposals retain the report's `control_tie_out`,
 application-history exception count/details and history cutoff under each report's
 `reconciliation` field. Missing evidence stays null, not zero. The complete report
 hash and existing certification checks remain binding; diagnostics cannot override
-an incomplete report. Keep company-specific proposal values outside Git.
+an incomplete report.
 
-The refreshed disposable-copy rehearsal proves one additional advance clearing
-without changing journal dates or financial records. The outstanding AP tie-out is
-fully attributable to deferred September movements; no exclusion, offset or date
-change is proposed to clear it. Other historical settlement chains still require
-proof. Existing-company activation remains blocked and production is unchanged.
-
-
-### Existing card correction review — local review aid, not deployed
+### Existing card correction review
 
 `historical_card_correction_review.inspect` accepts an explicitly selected settlement
 and existing correction journal. It reads a repeatable, read-only snapshot and checks
@@ -2280,20 +2192,10 @@ and `authorizes_transition=false` are intentional: matching amounts and narrativ
 references do not establish an audited relationship. This helper creates no link,
 permission, journal or reporting disposition, and is not an apply endpoint. A future
 approved relationship must recheck source evidence. Existing correction journals
-must not be posted again merely because a transition cannot yet follow their chain.
+must not be posted again merely because a transition cannot follow their chain.
 Report certification remains independent.
 
-A separately cloned rehearsal now includes the previously source-proven crossed
-invoice-application repair. Only the two application targets and associated cent
-amounts changed; all journal dates and protected configuration stayed unchanged.
-Existing application history was preserved, with automatic effective-date events
-and explicit review-date snapshots appended. Exact company/document values and
-monthly P&L effects remain in the private proposal, outside Git. No production
-change is authorized by this rehearsal. The full transition remains blocked on
-other settlement proofs and the deferred September AP difference.
-
-
-### Explicit correction links in historical transition proposals — local only
+### Explicit correction links in historical transition proposals
 
 `review_historical_account_policy.py prepare --correction-links <private.json>`
 accepts an explicit array of `{reconciliation_item_id, correction_id}` selections.
@@ -2321,13 +2223,7 @@ all non-account dimensions and the exact combined variance must agree. There is
 no rounding tolerance: an uncorrected cent still refuses. This proof does not
 certify every historical invoice-header use or remove independent report gaps.
 
-Three explicitly selected copied correction chains now pass without further data
-changes. The full preparation still stops at remaining settlement history and the
-deferred September AP difference. Both company policies remain disabled; no
-production approval, accounting mutation or deployment is implied.
-
-
-### Retained FX timing and expense classification — local review only
+### Retained FX timing and expense classification
 
 Historical full FX and residual-adjustment proofs retain a journal dated on or
 later than its payment but before its invoice when all source documents exist by
@@ -2351,7 +2247,7 @@ An inactive/header historical control remains unavailable for ordinary new journ
 Do not reactivate it, substitute a new account, or infer invoice amounts simply to
 clear a transition blocker. Separate source and correction review remains required.
 
-### Explicit complete settlement-family review — local, not deployed
+### Explicit complete settlement-family review
 
 `review_historical_account_policy.py prepare --settlement-families <private.json>`
 accepts an array of explicit `{ "bill_id": ..., "correction_id": ... }` selections.
@@ -2380,35 +2276,15 @@ card classification and requires the same explicit classification review as the
 same-currency path. A nonzero variance cannot use this alternate classification
 path. Neither change affects P&L or journal dates.
 
-
 A retained settlement undo with a historical settlement receipt must pass its
 dedicated receipt and application-history guards. Generic canceled-adjustment
 recognition cannot substitute for a missing or disabled reviewed-undo guard.
 
+### Reviewed canceled and corrected journals
 
-### Retained-history production status — 16 October 2026
-
-PR361's retained-history proof and guard fixes are deployed and verified. Earlier
-dated copy-only notes describe the rehearsal stage, not the current release status.
-The expressly reviewed non-September metadata repairs and exact historical permissions
-have been applied; Hala's 1100/1200 entity restrictions are recorded. These receipts
-preserve exact source evidence and do not authorize arbitrary new journals or
-renew themselves after source drift. Both company-wide policies remain disabled.
-September-dependent AP transitions, independent report gaps and activation approval
-remain unresolved; do not infer full readiness from this completed prerequisite work.
-Original journal dates and signed financial amounts remain unchanged. Pending
-supplier attachments remain pending and are not replaced by review assertions.
-
-
-### Reviewed canceled and corrected journals — production verified, 16 October 2026
-
-Migration `740_reviewed_historical_control_permissions.sql` and
-`historical_control_permissions` add an operator-only exact historical permission
-path. Migration 740 and the matching application are deployed and verified. The
-separately approved two-company transition is complete: exact permissions and
-account restrictions are recorded and both policies are enabled. Migration alone
-creates empty private receipt tables and guards; it does not enable policies,
-create receipts or edit company accounting.
+`historical_control_permissions` provides an operator-only exact historical permission
+path. Its private receipt tables and guards start empty; they do not enable policies,
+create receipts or edit company accounting on their own.
 
 Supported selections are `canceled_journal` (an original JOURNAL_ENTRY with its
 complete reciprocal native reversal), `card_correction` (an explicitly selected
@@ -2457,16 +2333,11 @@ The status is not rewritten. A label alone is insufficient: exact full payment,
 party, currency, journal, dimensions and competing-link checks still must pass.
 There is no new FX or write-off posting route.
 
-The full private two-company rehearsal and approved production transition passed
-with these receipts, reviewed genuine accounting corrections, remaining account
-restrictions and native policy activation. Both AP/AR reports are complete, certified and tied. The platform
-permissions/restrictions/activation change neither P&L nor cash, and original journal
-dates remain unchanged. Applied financial corrections and their exact verified impacts are
-kept in the private review packet. Both policies are enabled. Pending original
-supplier documents remain pending. September-dependent transition evidence is
-resolved without changing original journal dates. Future company changes still
-require their own current evidence and authorization; these receipts grant no
-permission to new ordinary control-account journals.
+These permissions, restrictions and activations change neither P&L nor cash, and
+original journal dates remain unchanged. Future changes require their own current
+evidence and authorization; these receipts grant no permission to new ordinary
+control-account journals.
+
 
 ### Bill case receipt conflicts
 
@@ -2475,12 +2346,12 @@ ledger entries. If that case receipt cannot be recorded, posting raises a failur
 and rolls back; it is not a definitive typed refusal. Do not retry solely from
 the error text: inspect the durable case and transaction outcome. A posted case
 stays protected even with a missing invoice link; a linked case cannot be moved
-back into review by a late refusal. The local reviewed-AP approval path records
+back into review by a late refusal. The reviewed-AP approval path records
 `refused: true` and `reason_code` only with exact persisted no-effect evidence.
 Pending replay can return that receipt; the bill returns for clarification with
 its saved reason and can accept a new reviewed revision. Unknown execution
-failures remain unknown. Immediate execution, other durable families and older
-callers retain their prior contracts and may display stale responses. Not deployed.
+failures remain unknown. Immediate execution and other durable families keep their
+own contracts.
 
 
 An owned `payment_link_lost` result with `effect_outcome=existing` and
@@ -2489,8 +2360,7 @@ identities. Never interpret it as `refused=true`, a safe retry, or an instructio
 to reverse. If `receipt_status=unavailable`, workflow receipt storage failed but
 the known financial effect remains. Inspect the committed confirmation hold and
 use reviewed recovery. Replaying the same intent preserves its historical result;
-a new reviewed intent requires a new explicit key and current validation. This
-transport is local and requires the payment producer package before release.
+a new reviewed intent requires a new explicit key and current validation.
 
 For `payment_batch.confirm_line`, a repeated request requires current access to
 both the workflow and the saved line's settlement domain. A failed result-cache

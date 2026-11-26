@@ -251,7 +251,7 @@ After submitting, the batch enters `pending_approval` and a task appears in `/wo
    - **Approved lines** → status changes from `pending` to `approved` (ready for transmission)
    - **Unchecked lines** → status changes to `excluded` (stays in batch for audit, not transmitted)
    - **Incomplete lines** → remain `incomplete` (unchanged)
-   - A bill comes back to the next proposal when its line is held (`excluded`), `cancelled` or reported failed by the provider (`failed`: rejected, declined or reverted), or when its line is `incomplete` on a finished batch (transmitted, processing, partially completed or completed). A line whose outcome is unknown (`processing`) keeps the bill, so nothing is paid twice.
+   - A bill comes back to the next proposal when its line is held (`excluded`), `cancelled` or reported failed by the provider (`failed`: rejected, declined or reverted; a failure whose outcome is marked uncertain, or with something posted from it, keeps the bill; after a reverted payment, check the bank statement for its debit before the bill is paid again), or when its line is `incomplete` on a finished batch (transmitted, processing, partially completed or completed). A line whose outcome is unknown (`processing`) keeps the bill, so nothing is paid twice.
 
 In the template workflow definition, batches with `total_amount >= 50,000` (in the batch currency) are assigned the **Red lane** (high-risk); the organisation can change the threshold, and which roles must approve is its workflow configuration. Use `approval_lane` and `approval_status` for the child approval workflow. `lane` describes the outer submission workflow.
 
@@ -474,7 +474,7 @@ For an incorrectly confirmed payment, use `transaction.reverse` with the origina
 
 Recovery refuses multiple/missing statement links, incompatible batch states, active confirmation claims and canonical movements shared with other source representations; the entire reversal rolls back. Do not unmatch the statement first: recovery needs the original linkage. A statement-derived external reference is cleared when it differs from the batch's payment reference; the previous value is retained in recovery history. Generic transactions without a linked batch settlement retain ordinary reversal behavior.
 
-### Atomic confirmation and existing-posting review (local implementation)
+### Atomic confirmation and existing-posting review
 
 A new confirmation commits its cash posting, source application, batch link and
 statement link in one database transaction. An error or lost connection before
@@ -496,16 +496,16 @@ blocks subsequent confirmations of that batch line against any statement. The
 batch-wide operation reports this item as requiring review, not as confirmed.
 Never automatically reverse the existing journal or submit another payment.
 
-The existing operator-only `services/posted_payment_adoption.py` helper can
-preview and apply an exactly evidenced, full, previously unapplied vendor payment
+An operator-only adoption service, not exposed through any tool or submit
+operation, can preview and apply an exactly evidenced, full, previously unapplied vendor payment
 in functional currency. It requires the separately approved preview fingerprint
 and actor/reason. Successful adoption clears only the hold naming that same
 payment, statement, invoice and batch line, and retains it in the adoption audit
-receipt. It is not an agent/tool operation. Partial, FX, employee/payroll and
+receipt. Partial, FX, employee/payroll and
 ambiguous legacy postings require a separately reviewed recovery; there is no
 generic hold-clear operation. Do not clear claims or holds by editing metadata.
 Old confirmation claims without sufficient posting evidence also remain review
-work; deploying this code does not repair historical records.
+work; nothing repairs historical records automatically.
 
 For new employee reimbursements, the expense source must belong to the same
 employee/entity/currency and have sufficient outstanding amount. The exact source
@@ -515,9 +515,8 @@ and settlement-link recovery. A missing or inconsistent receipt on a linked lega
 reimbursement blocks the entire reversal for reviewed recovery. Reversing an
 unlinked legacy journal does not by itself clear a confirmation hold.
 
-These changes are local and require the coordinated AR-273 existing-effect
-transport integration before release. They do not send or resend money, deploy
-code, approve a historical repair, or change accounting policy.
+Confirmation does not send or resend money, approve a historical repair, or
+change accounting policy.
 
 ### What Confirmation Creates
 
@@ -804,11 +803,11 @@ No migration or automatic repair of older cash entries is included. Incorrect hi
 
 Payment approval requires an active review step after lane skips and step conditions are evaluated. Both Approval and Edit & approve (`change_request`) are human decision steps and satisfy this requirement; notification-only steps do not. A definition with no applicable review step is refused with a configuration error. Lane labels describe risk, not reviewer count; the configured step chain determines the actual reviews. Submission returns `approval_workflow_id`, `approval_lane` and `approval_status` separately from the outer submission workflow.
 
-For “no active review step”, inspect the effective entity definition, step types, selected lane, lane skips and matching conditions before assigning a cause. Distinguish no configured steps from configured human steps that routing skipped. `approval`, `review` and `change_request` are supported human steps. If one should remain pending, preserve the revision and routing evidence for investigation. Unreleased diagnostics distinguish an empty step chain, no recognized human step, routing that skips every human step, and a human step missing from pending state despite being required. The last case calls for defect investigation. These categories do not prove an individual velocity rule or unlinked advance caused the refusal. Do not repeatedly retry unchanged configuration, remove approval controls or suggest a manual transfer as a workaround. Have an authorized administrator correct a confirmed configuration issue through the supported editor; configuration authority does not grant payment approval or transmission authority.
+For “no active review step”, inspect the effective entity definition, step types, selected lane, lane skips and matching conditions before assigning a cause. Distinguish no configured steps from configured human steps that routing skipped. `approval`, `review` and `change_request` are supported human steps. If one should remain pending, preserve the revision and routing evidence for investigation. The refusal message distinguishes an empty step chain, no recognized human step, routing that skips every human step, and a human step missing from pending state despite being required. The last case calls for defect investigation. These categories do not prove an individual velocity rule or unlinked advance caused the refusal. Do not repeatedly retry unchanged configuration, remove approval controls or suggest a manual transfer as a workaround. Have an authorized administrator correct a confirmed configuration issue through the supported editor; configuration authority does not grant payment approval or transmission authority.
 
 Rejecting (or requesting changes on) the approval task returns the pending batch to draft in the same transaction. The old workflow and its object link retain the decision history; resubmission creates a new review workflow. For legacy batches stuck pending after an already rejected approval, `payment_batch.reject` with a reason can return the batch to draft. Recovery refuses active or approved workflows and batches with transmitted/posted lines. Do not clear workflow references directly in SQL.
 
-Migration 650 adds one mandatory admin review step only to active, uncustomized payment approval definitions with no steps, including the shared template. Existing/custom step chains and lane rules remain unchanged. Customized definitions without an applicable review step require an administrator to correct their configuration.
+Active, uncustomized payment approval definitions that had no steps, including the shared template, carry one mandatory admin review step. Existing/custom step chains and lane rules are left as configured. Customized definitions without an applicable review step require an administrator to correct their configuration.
 
 
 ### Edits and rolling-total approval rules
@@ -826,11 +825,11 @@ Approved batches can be cancelled with a required reason through `payment_batch.
 When approval steps use condition groups, the first matching group determines the action. Later groups cannot replace an earlier automatic rejection or inclusion decision. Within an OR group, the first matching condition supplies the action/assignee. Keep one consistent action per AND group. Multiple steps still require their configured reviews; completion of one step alone does not approve a batch with further reviews pending.
 
 
-Unreleased configured rejection handling: if an approval workflow rejects immediately via an auto_reject step condition, payment_batch.submit reports success=false, approval_status=rejected and status=draft. The batch link is reconciled in the submission transaction, clearing the active approval reference/submission markers while retaining the rejected workflow and object-link history. This is a policy refusal, not an approval or payment execution. Do not automatically resubmit without correcting the payload or having an authorized administrator review the rule. Local synthetic tests verify threshold behavior and draft recovery; production rollout is pending.
+Configured rejection handling: if an approval workflow rejects immediately via an auto_reject step condition, payment_batch.submit reports success=false, approval_status=rejected and status=draft. The batch link is reconciled in the submission transaction, clearing the active approval reference/submission markers while retaining the rejected workflow and object-link history. This is a policy refusal, not an approval or payment execution. Do not automatically resubmit without correcting the payload or having an authorized administrator review the rule.
 
-Local unreleased dimension-edit guard: workflow payload corrections and payment-line payload synchronization now resolve dimension approver dependencies against both the stored and proposed payload before saving. A changed or unresolved reviewer refuses the edit; reject and resubmit to establish a new route. Included steps use the saved approver rules; conditional assignee overrides and submitter-assigned steps take precedence. Dimension fallback dependencies are checked conservatively even when another rule may currently win. This does not reassign existing tasks or record decisions, and does not certify handling of later changes to employee/dimension master data.
+Dimension-edit guard: workflow payload corrections and payment-line payload synchronization resolve dimension approver dependencies against both the stored and proposed payload before saving. A changed or unresolved reviewer refuses the edit; reject and resubmit to establish a new route. Included steps use the saved approver rules; conditional assignee overrides and submitter-assigned steps take precedence. Dimension fallback dependencies are checked conservatively even when another rule may currently win. This does not reassign existing tasks or record decisions, and does not certify handling of later changes to employee/dimension master data.
 
-On the QA branch, payment-batch workflow/request reads require at least one of
+Payment-batch workflow/request reads require at least one of
 `payments:read`, `ap:read`, or `accounting:read` (or matching broad authority).
 Salary batches additionally require `payroll:read`; payroll, AR, audit or ordinary
 master-data read alone does not grant batch access. Request source tables,
@@ -838,17 +837,14 @@ request/response object types and explicit batch-ID metadata all retain this
 requirement, including thread summaries and linked notifications. Entity limits
 remain independent. This matches the existing MCP batch registry and Admin
 attachment policy; it does not add grants or authorize a payment. Direct Admin
-payment-screen reads now enforce the same batch-domain grant in the requested
+payment-screen reads enforce the same batch-domain grant in the requested
 organization before accessing batch data. This covers lists, details, timelines,
 approval links, payment lines, pending approvals and transaction links. These
 queries also exclude stored salary batches without payroll read, before list
 limits and detail follow-up reads. Salary provenance uses payroll-run links,
-payment-line references/types and stored source transaction types. Isolated SQL
-acceptance covers lists, pending approvals, details, timelines and transaction
-links. Linked payment lines and transactions must match the batch entity.
+payment-line references/types and stored source transaction types. Linked payment lines and transactions must match the batch entity.
 Approval pointers and timeline workflows require same-organization definitions
-and the shared workflow domain/entity policy. Hosted sessions, other provenance
-formats and representative-scale performance remain open.
+and the shared workflow domain/entity policy.
 
 Payment workflow reads treat `batch_id` and `payment_batch_id` as aliases for the
 same batch. Either may be supplied alone; when both are present they must identify
@@ -861,7 +857,7 @@ workflow payloads or change approval/write authority.
 
 Connector transmission reads legacy plaintext and encrypted account/routing numbers with a payment-line and executing-user audit context. Unreadable values fail that line locally without sending it; valid lines retain existing batch behavior. Review the failure and verify details before retrying. No data conversion or automatic bank-detail repair is performed.
 
-### Confirmation authority (local AR-273 integration)
+### Confirmation authority
 
 Confirmation requires the current entity scope and the financial permission for
 its stored settlement route: vendor AP uses `ap:write`, salary uses
@@ -875,25 +871,9 @@ bank before matching or applying any line. An authorization failure stops the
 operation rather than becoming a per-line failure with financial identifiers.
 
 
-### Payment confirmation outcomes (AR-273, local implementation)
+### Payment confirmation outcomes
 
-A bank payment submitted for workflow approval remains unresolved. The processor
-records `payment_confirmation_pending` and the workflow ID in statement metadata,
-counts the row as needing review rather than confirmed, and does not create a
-second human question for that approval. Normal unmatched-line processing excludes
-that row; the existing workflow remains authoritative. This change does not add
-an approval callback or claim automatic completion after approval.
-
-A `payment_link_lost` response is a known-existing-effect failure, never permission
-to retry or reverse a payment. The processor preserves the owned transaction,
-source transaction, batch, entity, actual/requested statement identifiers and
-existing-effect state in `payment_confirmation_evidence` in statement metadata
-and the run-local review entry. Those fields survive the 500-character prose
-limit. Unknown execution remains unknown; inspect execution evidence before any
-further action. These changes introduce no country or accountant policy.
-
-The payment-review write checks the current line before changing it. If approval
-settled the same batch and statement between submission and review, the live
-posted payment link wins and the processor reports it as confirmed. An existing
-linked payment likewise stays matched. Missing or unreadable evidence remains
-unresolved; it never authorizes a second posting or downgrades a matched line.
+A `payment_link_lost` response from payment confirmation is a known-existing-effect
+failure (`effect_outcome: existing`, review required), never permission to retry or
+reverse a payment. Unknown execution remains unknown; inspect execution evidence
+before any further action.

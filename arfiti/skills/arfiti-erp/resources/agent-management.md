@@ -784,9 +784,6 @@ chat shortcuts for editing or completing Bill review tasks.
 
 ## Agent rules (the organisation's own rules)
 
-Status: AR-1185, built but not deployed. Until it is deployed, `query("agent_rules")`
-returns an unknown entity type error.
-
 An organisation can save short plain-text rules saying how it wants an agent to work.
 Read them before you start, for the agent you are and the entity you work for:
 
@@ -821,9 +818,6 @@ characters, plain text.
 
 ## Managed agents: runtime and runs
 
-Status: AR-1189, built but not deployed. Until it is deployed, `set_runtime` and
-`query("managed_agent_run")` are refused as unknown.
-
 An agent in the organisation's list is run by the built-in runtime or by a managed agent
 (a session in the agent service that works through the same tools as you). Which one is
 a setting on the organisation's row; an owner or admin changes it:
@@ -842,8 +836,7 @@ submit(object_type="agent_definition", operation="set_runtime", data=json.dumps(
 
 A managed row that names no agent is **not set up** (a new organisation's rows start this
 way; the agent list says "Not set up"): an event addressed to it ends `failed` with a
-sentence that says so. Where the platform sets agents up itself (AR-1210, built but not
-deployed), an owner or an admin of every legal entity sets up all of the organisation's
+sentence that says so. Where the platform sets agents up itself, an owner or an admin of every legal entity sets up all of the organisation's
 managed agents in one call, and onboarding runs the same:
 
 ```python
@@ -886,7 +879,7 @@ session starts: the event and the run are `failed` with that reason, and after a
 
 What a managed agent runs (its prompt and skills) is kept in the agent service. The
 platform holds a record of it, so a person can read it on the agent's page
-(Standard instructions) and you can read it here (AR-1199, built but not deployed):
+(Standard instructions) and you can read it here:
 
 ```python
 query("agent_instructions", filters={"agent_type": "bill_processor"})   # versions, newest first; in_use marks the one in use
@@ -909,7 +902,7 @@ submit(object_type="agent_definition", operation="set_instructions", data=json.d
   rules (`agent_rules`), not this.
 
 A managed session whose submit was held for approval records what it waits for, and is told
-when the workflow is decided (AR-1194, built but not deployed):
+when the workflow is decided:
 
 ```python
 submit(object_type="managed_agent_run", operation="wait", data=json.dumps({"session_id": "sesn_...", "workflow_id": "<pending workflow id>",
@@ -1322,10 +1315,8 @@ The next run repairs confirmed delivery stamps automatically. Unknown dispatches
 require operator verification; never delete an effect key or payment claim to
 force a retry. `collector_delivery_recovery.py` is an operator maintenance command,
 not an agent tool. Recording a verified provider outcome does not send an email.
-Migration 610 is required before deploying this pipeline version.
 
-Amortization Recognizer also uses its canonical deterministic pipeline on the
-2026-09-23 platform release. Do not switch its mode to recover the old host. Task retry
+Amortization Recognizer also uses its canonical deterministic pipeline. Do not switch its mode to recover the old host. Task retry
 authority comes from the stored human response, scoped schedules and current
 permissions. Waiting workflows retain their existing identity; final status uses
 live recognition evidence. Preview does not post or resolve a task.
@@ -1340,16 +1331,15 @@ currently unmatched source is resolved. Legacy verification-completed events are
 observational; use the owning task response path for financial instructions.
 
 
-Billing Run now uses mandatory prepare/record-usage/bill/finalize stages. Its V2
+Billing Run uses mandatory prepare/record-usage/bill/finalize stages. Its V2
 usage answers use the same owning response-attempt lifecycle, with a Billing domain
 adapter: stored contract periods and quantities, current human authority, durable
 workflow replay, and invoice evidence before completion. A child workflow approval
 must not auto-complete a response-owned task. Legacy usage completion callbacks
-require a new owning reply. This was deployed and verified in the 2026-09-23
-platform release (PR #134).
+require a new owning reply.
 
 
-### Invoice Delivery pipeline and uncertain sends (2026-09-23)
+### Invoice Delivery pipeline and uncertain sends
 
 Invoice Delivery has one mandatory prepare/deliver/finalize pipeline, including
 stored code definitions. Automatic delivery remains opt-in; a manual resend is
@@ -1362,9 +1352,9 @@ never clear a claim to force a retry. Preview performs no rendering or writes.
 The agent sends invoices and does not collect payment.
 
 
-### Period Close pipeline (2026-09-23 migration)
+### Period Close pipeline
 
-Period Close now uses mandatory prepare/evaluate/resolve/finalize stages, including
+Period Close uses mandatory prepare/evaluate/resolve/finalize stages, including
 stored hybrid definitions. Its saga, check registry and financial workflows remain
 authoritative. An approval submission keeps the final phase open; ten-minute
 durable continuations reuse the same command/workflow and verify the current closed
@@ -1376,7 +1366,7 @@ Domain `dry_run` records a diagnostic saga; pipeline `preview` performs no write
 or model calls. Approval polling does not make another model memo call.
 
 
-### Payment Collection pipeline (2026-09-23 migration)
+### Payment Collection pipeline
 
 Payment Collection uses mandatory prepare/charge/post/finalize stages, including
 stored code-mode definitions. An invoice reservation and provider idempotency key
@@ -1386,10 +1376,10 @@ posted AR payment evidence is `collected`. Confirmed declines alone schedule
 new dunning intentions. Private receipt bindings preserve current actor/entity
 and workflow authority through posting. Invoice creation still does not dispatch
 collection. See GUIDE_AGENT_PAYMENT_COLLECTION.md for configuration, recovery,
-provider limits and tests; production deployment remains a separate operation.
+provider limits and tests.
 
 
-### Payment Proposal pipeline (2026-09-23 migration)
+### Payment Proposal pipeline
 
 Payment Proposal uses mandatory prepare/select/groups/create/finalize stages and
 reserves current source payables before approval. The executor rechecks source
@@ -1446,7 +1436,7 @@ recovery before another model activation. The technical domain-outcomes guide
 documents the supported actions and read-only recovery command.
 
 
-### Agent mode and origin display (deployed 2026-09-25)
+### Agent mode and origin display
 
 The definitions list, quick view and detail/edit views distinguish LLM, Code,
 Hybrid and Pipeline. Pipeline is not an alias for Hybrid. Missing or unsupported
@@ -1457,15 +1447,11 @@ until its base and effective configuration have been reconciled. These display
 changes do not convert agents or change dispatch.
 
 
-### Authoring release status
+### Authoring preview
 
-The authoring implementation was deployed on 2026-09-25. See
-`RELEASE_AGENT_AUTHORING_PARITY_2026-09-25.md` for deployment evidence and known
-follow-ups, the closed `SPEC_AGENT_AUTHORING_PARITY_2026-09-24.md` for the specification, and pipeline
-guide section 9 for tool contracts. Supplied-JSON preview has no production DB or
-provider adapters. Do not describe it as live model or financial execution.
-Architect release 107 is published for reviewed upgrades; publication alone did not
-activate its changed prompt for existing customers.
+See pipeline guide section 9 for the authoring tool contracts. Supplied-JSON
+preview has no production DB or provider adapters. Do not describe it as live
+model or financial execution.
 
 
 ### Native Bill posting authority
@@ -1483,8 +1469,6 @@ At execution, including after approval, the worker rechecks the Bill revision,
 agent capability and entity. A successfully completed originating run can finish
 its approved workflow; disabled agents, revoked capabilities and failed runs
 cannot. This authority covers AP invoices only, not AR, payroll or journals.
-Migration 626 is required before deploying this code. These changes have local
-regression evidence; production deployment remains a separate release gate.
 
 
 Collection posting carries the receipt owner's freshly verified human permissions
@@ -1511,7 +1495,7 @@ template changes; stored tenant skills require the normal approved regeneration.
 
 Dashboard Events is an owner/admin operations view, scoped to accessible entities; restricted admins cannot open unscoped events. Use Communications for ordinary mail access. Memory, job, entity-email, and run-count reads are entity-scoped. A restricted reader sees a scheduled job only when all its targets are accessible; organization-wide jobs require organization-wide access.
 
-### Activation validation for direct operations (2026-10-06, release pending)
+### Activation validation for direct operations
 
 An explicit capability can name a registered platform executor (for example
 `agent_request.resolve`) or `attachment.create`, even when no tenant workflow row
@@ -1519,18 +1503,17 @@ exists. Activation checks the existing routing policy and executor registration.
 Human grants for this path require organization administrator authority; agents
 can only delegate capabilities they already hold. Runtime grant/entity checks
 remain enforced. Existing tenant workflow permissions still apply, and missing
-financial workflows and unknown executors remain refused. This validation change
-does not add capabilities to existing definitions or enable agents automatically.
+financial workflows and unknown executors remain refused. This validation does not add capabilities to existing definitions or enable agents automatically.
 
 
-## Bounded worker admission (unreleased correction)
+## Bounded worker admission
 
-A pending event remains queued when its lane has no capacity. The claim query now
-materializes the selected event IDs once so PostgreSQL cannot exceed the requested
-batch through a repeated locking scan. Organisation/fleet/worker caps and reserved
-interactive/finalization capacity are unchanged. This requires updated workers;
-confirm deployment before claiming the correction is live. Existing processing
+A pending event remains queued when its lane has no capacity. The claim query
+materializes the selected event IDs once, so a claim never takes more than the
+requested batch. Organisation/fleet/worker caps and reserved
+interactive/finalization capacity apply as usual. Existing processing
 claims remain subject to ordinary heartbeat and liveness recovery.
+
 ### Agent task access after role changes
 
 Agent request details and supporting task data require a current operational
@@ -1582,15 +1565,15 @@ filesystem and WebFetch tools, remain unavailable through this exception. This
 does not waive workflow availability or current/pinned permission checks.
 
 
-### Saga checkpoint workflow references (QA branch)
+### Saga checkpoint workflow references
 
 A saga is readable only when every `close_workflow_id` in its root checkpoint,
 phase checkpoint or phase output resolves to a workflow and definition in that
 saga’s organization. The check applies even without a linked agent instance.
 Missing or cross-company definitions hide the saga before rows, counts and pages
 are returned, alongside existing domain/entity checks. Valid same-company links
-remain readable with the required permissions. This is read protection; it does
-not repair stored links, grant write authority or certify hosted deployment.
+remain readable with the required permissions. This is read protection; it
+does not repair stored links or grant write authority.
 
 The same read policy rejects a present `pending_request_ids` container that is
 text, a number or an object in any of those three locations. It must be an array
@@ -1599,7 +1582,7 @@ empty list. Every listed request still has to resolve and satisfy current read
 authority; empty arrays and null retain their existing no-reference behavior.
 
 
-### Execution progress-log containers (QA branch)
+### Execution progress-log containers
 
 Admin and MCP execution reads require stored `progress_log` to be an array or
 null. A malformed object, string or number hides the execution before rows,
@@ -1615,7 +1598,7 @@ Empty objects and null remain supported; valid structured metadata still receive
 the existing domain/entity checks.
 
 
-### Request line source authority (QA branch)
+### Request line source authority
 
 For readers whose transaction types are restricted, Admin and MCP resolve each
 `lines[].source_transaction_id` in request and response metadata against the
@@ -1639,7 +1622,7 @@ negative zero and out-of-range bigint values remain unresolvable. Invalid text
 cannot produce a numeric-cast error. This changes query cost, not read grants.
 
 
-### Nested execution result authority (QA branch)
+### Nested execution result authority
 
 Admin and MCP execution reads validate the reserved `created_documents` and
 `results` arrays in payloads and progress-entry data. Containers must be arrays
@@ -1651,8 +1634,7 @@ including for wildcard readers. Missing, noncanonical, oversized and conflicting
 references hide the execution before rows, counts and pages; valid AP and
 payroll results remain available to appropriately authorized readers.
 These checks cover one reserved result-array level. Arbitrary deeper JSON,
-free-text disclosures and individual display-field validation remain under
-review. They do not repair stored data or grant write/approval access.
+free-text disclosures and individual display fields are not covered. They do not repair stored data or grant write/approval access.
 
 
 Reserved execution result entries carrying `request_id` must resolve to a
@@ -1662,7 +1644,7 @@ returning the execution. Missing, foreign-company/entity or forbidden-thread
 references hide the execution; null references and readable AP/payroll requests
 retain their existing behavior. This covers `created_documents` and `results`
 entries, not arbitrary request-like fields elsewhere or recursive reference
-chains. Workflow references and broader provenance remain under audit.
+chains. Workflow references are covered below.
 
 
 Reserved result entries with `workflow_id` must resolve to a workflow and
@@ -1704,10 +1686,10 @@ a valid batch ID does not override a conflicting, missing or cross-entity one.
 Thread siblings and execution metadata using the shared request policy inherit
 this boundary. Payroll authorization changes domain visibility, not entity scope.
 
-### Deferred references in execution payloads (QA branch)
+### Deferred references in execution payloads
 
 Execution inputs, outputs, progress-log envelopes/data and supported `results` /
-`created_documents` records now enforce `pending_request_ids` and
+`created_documents` records enforce `pending_request_ids` and
 `close_workflow_id` references as well as the existing singular request/workflow
 fields. Each pending request must exist in the current organization/entity and
 pass the shared request/thread read policy. A close workflow must resolve with a
@@ -1721,7 +1703,7 @@ returned. This does not alter deferred-phase processing, repair historical
 references or grant write authority. Arbitrary deeper JSON and recursive chains
 are not certified by this bounded reference check.
 
-### UUID reference lookups (QA branch)
+### UUID reference lookups
 
 Execution and saga request/workflow references must use the lowercase hyphenated
 UUID spelling returned by the API. Guarded input-side UUID casts preserve the
@@ -1730,7 +1712,7 @@ allowing stored UUID primary-key lookups. Tenant/entity/domain and thread-siblin
 checks still apply after lookup. No schema migration, index creation or stored
 payload normalization is performed by this optimization.
 
-### Structured execution outcome references (QA branch)
+### Structured execution outcome references
 
 The shared read policy checks request/workflow metadata inside `task_outcome`,
 `investigation`, and `investigation.outcome`, in addition to supported root and
@@ -1742,14 +1724,14 @@ canonical integer spelling; UUID spelling requirements are unchanged. Malformed
 wrapper containers are refused. Empty lists and null wrappers remain supported.
 
 This is a bounded check of producer-defined structured references. Other evidence
-prefixes require their own authority mapping. Attempt/draft and fiscal-period
-checks are described below; saga continuations remain open. Free text and arbitrary recursive JSON are not certified.
+prefixes require their own authority mapping. Attempt/draft, fiscal-period and saga
+checks are described below. Free text and arbitrary recursive JSON are not covered.
 The change does not execute task actions, rewrite payloads or grant permissions.
 
-### Attempt and draft evidence references (QA branch)
+### Attempt and draft evidence references
 
 Execution outcome references of the form `agent_request_response_attempt:<uuid>`
-now resolve to an existing attempt in the current organization. Its parent request
+resolve to an existing attempt in the current organization. Its parent request
 must pass current entity/domain and thread-sibling authority. The attempt's stored
 execution workflow and root metadata in its compiled directive, domain command
 and interpretation also pass the existing reference and payload checks. Malformed
@@ -1765,10 +1747,10 @@ is required. The draft's stored transaction, workflow and active request links
 must remain readable. `bill_draft:<id>:followup:<nonempty-label>` checks the same
 draft authority; the label is descriptive and does not prove follow-up completion.
 These checks do not execute recovery actions or rewrite saved evidence. Arbitrary
-attempt metadata and remaining master/attachment reference
-types still require separate verification.
+attempt metadata is not covered; master-data and attachment references are
+described below.
 
-### Fiscal-period execution evidence (QA branch)
+### Fiscal-period execution evidence
 
 Execution `pending_refs` and `evidence_refs` recognize `fiscal_period:<id>` and
 `fiscal_period:<entity_id>:<period_name>` as distinct formats. Each must resolve
@@ -1780,7 +1762,7 @@ accounting permission requirement. Readability does not prove current closure,
 locking, or permission to close/reopen a period. `close_command:<uuid>` refers to
 retained saga/phase bindings, as described below.
 
-### Recursive attempt outcome authority (QA branch)
+### Recursive attempt outcome authority
 
 Supported attempt evidence is traversed through `task_outcome`, `investigation`
 and `investigation.outcome`, and `task_execution` and `task_execution.outcome`.
@@ -1789,11 +1771,11 @@ mutual attempt cycles terminate without an arbitrary depth cutoff. Every reached
 supported request/workflow/transaction, attempt, draft or period reference still
 passes its stored authority checks. One unreadable or malformed reached record
 withholds the execution. Ordinary scalar `outcome` labels are not treated as
-nested wrappers. These checks do not follow arbitrary JSON fields or free text;
-other unmapped evidence families remain open. No effects,
-recovery actions, merges or deployment are performed by this read policy.
+nested wrappers. These checks do not follow arbitrary JSON fields, free text or
+unmapped evidence families. This read policy performs no effects or
+recovery actions.
 
-### Saga and close-command outcome authority (QA branch, deployment pending)
+### Saga and close-command outcome authority
 
 Execution `pending_refs` and `evidence_refs` resolve `agent_saga:<uuid>`,
 `saga:<uuid>:phase:<positive-number>:iteration:<nonnegative-number>` and
@@ -1816,13 +1798,13 @@ period-close submission receipt. Conflicting owners are denied. Retained workflo
 and receipt metadata remain subject to authority checks. A root-field lookalike
 is not the producer's binding. This establishes read eligibility only: it does
 not prove close completion, authorize a close/retry, or bypass current actor and
-phase mutation guards. Missing retained history fails closed; this change does
-not recreate history. Other unmapped typed records and investigation references,
-arbitrary JSON and general request/workflow graph expansion remain open.
+phase mutation guards. Missing retained history fails closed; reading does
+not recreate history. Other unmapped typed records, arbitrary JSON and general
+request/workflow graph expansion are not covered.
 
-### Typed master and configuration evidence (QA branch, deployment pending)
+### Typed master and configuration evidence
 
-Supported execution evidence `<kind>:<positive-id>` now resolves a stored record
+Supported execution evidence `<kind>:<positive-id>` resolves a stored record
 in the execution entity for: account, amortization_schedule, bank_account,
 customer, dimension_value, exchange_rate, fixed_asset_category, item, payment_term,
 posting_profile, recurring_contract, tax_code, tax_registration and vendor.
@@ -1834,13 +1816,13 @@ The installed read contract requires `ap:read` or `master_data:read` for vendors
 `ar:read` or `master_data:read` for customers, and `accounting:read` for amortization
 schedules. Existing wildcard semantics apply. The other mapped types retain their
 current entity-scoped registry read contract without a new permission requirement.
-The mapping is checked against the installed registry in tests. These are read
+These are read
 checks, not `current_record`'s active/effect-completion checks; readability does not
 prove completion or grant write access. Organization-only tax/dimension records,
 unregistered types, investigation arguments and arbitrary reference fields remain
 outside this bounded mapping. Fiscal-period evidence retains its separate formats.
 
-### Investigation bill and attachment read authority (QA branch, deployment pending)
+### Investigation bill and attachment read authority
 
 Non-null persisted `investigation` metadata requires current AP read authority,
 including narrative reasons without record IDs. Its `outcome.bill_id` and known
@@ -1864,7 +1846,7 @@ The producer also returns flattened output. Its `bill_id` is interpreted only
 when paired input identifies `reconciliation_evidence_v1`, directly or through
 `job_payload.engine_version`. Unrelated root `bill_id` fields retain their prior
 semantics. This source binding is retained when traversing saga phases and linked
-instances. Producer-bound purchase IDs now require current stored purchase
+instances. Producer-bound purchase IDs require current stored purchase
 ownership: AP read plus entity scope, and for human callers the stored membership
 or entity employee link. Missing purchase records, malformed IDs, missing actors
 or memberships, foreign entities and mixed-owner self-service rows are withheld.
@@ -1875,7 +1857,7 @@ meaning. Arbitrary source text and unmapped references remain outside this scope
 No write, retry or financial effect is authorized by this read.
 
 
-### Reconciliation request evidence reads (QA branch, not deployed)
+### Reconciliation request evidence reads
 
 Stored `reconciliation_agent` requests with action `investigate_purchase` or
 `review_purchase_settlement` require AP read permission and current purchase
@@ -1892,11 +1874,11 @@ hides the request. Attachment ownership uses its canonical owner type; card
 sources use master employee IDs, while purchases use entity employee IDs.
 Legacy requests without `source_evidence` remain supported. Readability does not
 approve settlement, refresh a historical snapshot, or bypass version/effect
-checks. Additional unmapped request references and arbitrary metadata/free text
-and hosted acceptance remain open.
+checks. Other unmapped request references and arbitrary metadata/free text are not
+covered.
 
 
-### Bill and billing-usage request reads (QA branch, not deployed)
+### Bill and billing-usage request reads
 
 Admin and MCP request readers require `ap:read` for the installed `review_bill`
 action and `ar:read` for `provide_usage_data`. These requirements apply even to
@@ -1904,12 +1886,11 @@ legacy rows without owner, object-type or source-table hints, and also to known
 actions in response metadata. They add to existing domain/entity checks. Every
 member of a thread must be readable before rows, counts and pages are returned;
 a thread containing both actions requires both domains. Wildcard grants retain
-both domains. Other actions are not classified by this change. Read access does
-not authorize approval, posting, changing a draft or supplying usage. Broader
-structured-reference and hosted-role acceptance remains open.
+both domains. Other actions are not classified by these checks. Read access does
+not authorize approval, posting, changing a draft or supplying usage. 
 
 
-### Stored review and usage references (QA branch, not deployed)
+### Stored review and usage references
 
 For `review_bill`, a supplied draft ID and revision must resolve together to a
 stored revision of a draft in the request entity. A linked transaction must be
@@ -1926,10 +1907,11 @@ to request and response metadata before rows, counts and pagination. Responses
 inherit the originating request action even when they omit their own action. Approval,
 posting and usage submission still perform their existing live validations.
 The bounded draft workflow graph is described below. Source attachments and
-arbitrary embedded metadata remain outstanding read-authority coverage.
+arbitrary embedded metadata are not covered by these checks.
 
 
-### Storage outcome binding correction (QA branch, not deployed)
+### Storage outcome binding
+
 
 Upload outcomes use the newest matching bill draft in the upload's entity. A
 matching storage key in another entity cannot supply failure details, a posted
@@ -1941,22 +1923,21 @@ unrelated event types cannot mark this upload processing or suppress Reprocess.
 Valid live upload events continue to block duplicate processing.
 A linked task contributes its ID/status only when its action is `review_bill`
 and its `bill_draft_id` names the matched draft. Same-entity tasks for another
-draft or action are ignored. This does not certify all task payload references.
+draft or action are ignored. Other task payload references are not checked here.
 The same joins run under the existing upload-row lock for Reprocess, so a newer
 foreign draft cannot override the local posted case and permit another attempt.
 
 Owner/admin reprocess authorization, entity checks, live-run/posting refusals and
-source-file checks are unchanged. Historical mismatched references are ignored
-for these derived outcomes; this change does not repair stored data or authorize
-a retry. Broader task payload reference authority and arbitrary posting-result
-content remain separate acceptance work.
+source-file checks still apply. Historical mismatched references are ignored
+for these derived outcomes; this does not repair stored data or authorize
+a retry.
 
 
-### Bank worklist read bindings (QA branch, not deployed)
+### Bank worklist read bindings
 
 > **Retired (AR-1295, November 2026).** The built-in bank review lifecycle is removed: `services/banking/review_*`, `blocks/bank_task.py`, `bank_task_contract.py`, `bank_resolution.py`, their answer routes and the review hooks in the posting executors, the workflow engine and the job scheduler. `agent_request` create refuses a new `review_statement_lines` / `review_card_transactions` task owned by `bank_transaction_processor`, and respond refuses an answer to an existing one: cancel it instead. Existing tasks keep their history and still render. The managed bank agent asks with its own verification tasks. What follows is the record of the retired behaviour.
 
-For `review_statement_lines` and `review_card_transactions`, request reads now
+For `review_statement_lines` and `review_card_transactions`, request reads
 check stored `lines[].id` and `_bank_worklist.rows` keys against the corresponding
 business rows in the request entity. Statement-ID lists must resolve in that
 entity too. Missing, foreign or malformed references withhold the request and
@@ -1968,28 +1949,12 @@ Linked GL/posting transaction IDs use the existing transaction-read policy,
 including stored transaction type and reversal ancestry. A fingerprint is not
 authority and these read checks do not certify freshness, approval or completion.
 The checks do not introduce a new Bank permission or repair historical records.
-Free-text classification remains separate acceptance work; hosted identity and performance acceptance
-remain open.
+Free text is not classified.
 
 
-### Bank snapshot parent bindings (QA branch, not deployed)
+### Historical Bank review parent authority
 
-Creating or revalidating a Bank review snapshot requires the statement line and
-its statement to name the same bank account. Card rows must reference a program
-in their entity; explicitly configured funding and card bank accounts must also
-resolve in that entity. Optional account references may remain absent. A broken
-explicit reference is not treated as an unconfigured optional account.
-
-An inconsistent row is refused before a new fingerprint is returned. Investigate
-the source and configuration through authorized workflows; do not retag records,
-change old fingerprints or bypass the refusal to force a retry. This correction
-does not repair historical data or certify the read authority of previously
-stored request narratives. Existing status/dispute and response gates remain.
-
-
-### Historical Bank review parent authority (QA branch, not deployed)
-
-Historical Bank review reads now also validate each row's stored parents. A
+Historical Bank review reads also validate each row's stored parents. A
 statement line must resolve to a statement in the request entity and use that
 statement's bank account; the account must resolve in the same entity. Card
 rows must resolve to a program in the request entity, and every explicit funding
@@ -1999,11 +1964,10 @@ the same account check. Absent optional program accounts remain supported.
 These checks apply before request/thread rows, totals and pages, including
 response metadata. They validate identity and entity authority, not current
 operational eligibility: archived, voided or disputed history is not hidden
-merely because it cannot be executed again. Arbitrary narratives, hosted identity acceptance and representative performance
-remain open. No historical data is repaired by reading it.
+merely because it cannot be executed again. Arbitrary narratives are not checked. No historical data is repaired by reading it.
 
 
-### Linked re-ask request authority (QA branch, not deployed)
+### Linked re-ask request authority
 
 Admin/MCP stored request reads follow explicit `reask_of_request_id` values in
 request and response metadata. Every reachable request and its thread siblings
@@ -2017,11 +1981,10 @@ when it has no request ID or thread columns.
 This validates stored read authority, not whether a re-ask completed successfully
 or whether free-text narratives are safe. It does not repair references. Use
 authorized source/configuration recovery rather than editing history to force a
-read. Hosted identity, representative performance and arbitrary narrative
-acceptance remain open.
+read.
 
 
-### Bill draft active-request authority (QA branch, not deployed)
+### Bill draft active-request authority
 
 When `review_bill` metadata names a draft/revision, Admin/MCP request reads also
 follow the draft's stored `active_request_id`, when present. The linked request
@@ -2034,11 +1997,11 @@ Readable self/mutual cycles and absent optional active-request links remain
 supported. Unrelated actions do not acquire bill-review semantics merely by
 carrying a `bill_draft_id` field. These are read checks, not current-revision
 approval or posting authorization. Do not change historical pointers to bypass
-a refusal; use authorized case recovery. Source-attachment graphs, arbitrary narratives and hosted/performance acceptance
-remain open; the bounded draft workflow graph is described below.
+a refusal; use authorized case recovery. Source-attachment graphs and arbitrary narratives are not covered; the bounded
+draft workflow graph is described below.
 
 
-### Bill draft workflow authority (QA branch, not deployed)
+### Bill draft workflow authority
 
 Bill-review request reads follow a stored draft's optional `workflow_id`. The
 workflow and its definition must belong to the request organization, and its
@@ -2057,12 +2020,11 @@ Response review metadata and virtual execution metadata use the same rules.
 
 These are historical read-authority checks, not approval, current-revision or
 posting authorization. They neither change stored pointers nor repair workflows.
-Other object-link families retain their existing domain checks; this does not
-certify every nested reference, source attachment or free-text narrative. Hosted
-identity and representative performance acceptance remain open.
+Other object-link families retain their existing domain checks; not every nested
+reference, source attachment or free-text narrative is checked.
 
 
-### Investigation request saga authority (QA branch; not deployed)
+### Investigation request saga authority
 
 A stored `reconciliation_agent` request with action `investigate_purchase` must
 reference a saga in the same organization and entity, with type
@@ -2078,12 +2040,11 @@ is not a condition for reading its history. Settlement-review requests retain
 their separate producer contract and do not acquire a required saga ID.
 
 These checks neither resume a saga nor approve settlement. Do not change stored
-references to bypass a read refusal. Additional unmapped metadata, arbitrary
-narratives, representative performance and hosted identity acceptance remain
-open. Isolated SQL validation covers this implementation; merge and deployment remain pending.
+references to bypass a read refusal. Unmapped metadata and arbitrary
+narratives are not checked.
 
 
-### Delegation parent read authority (QA branch, not deployed)
+### Delegation parent read authority
 
 Admin/MCP request reads follow stored `parent_request_id` and the reserved
 `original_triage_request_id` in request/response metadata. For the installed
@@ -2103,11 +2064,10 @@ without granting access through a forbidden member.
 Completed parents remain readable when their current authority permits it. These
 read checks do not certify fingerprint freshness, outcome completion, routing
 correctness or permission to resume a parent. Existing mutation/recovery checks
-still apply. Other producer reference fields, arbitrary copied text and hosted
-identity acceptance remain open.
+still apply. Other producer reference fields and arbitrary copied text are not checked.
 
 
-### Bill recovery payload read authority (QA branch, not deployed)
+### Bill recovery payload read authority
 
 The Bill-only `fix_default_expense_account` action requires `ap:read`, including
 when its original payload is absent. Its optional existing/returned profile
@@ -2127,9 +2087,9 @@ Absent/null optional originals remain supported. Generic posting-profile tasks
 without a copied Bill payload keep their existing policy; unrelated actions do
 not acquire these field meanings. Readability is not permission to retry or
 proof that configuration is repaired. Raw prose, attachments, source email/upload
-identity and other source fields not covered by the existing graph remain outside
-this bounded verification. Other copied-payload producers and the no-action
-missing-GL escalation still need explicit producer binding and hosted acceptance.
+identity and other source fields not covered by the existing graph are outside
+these checks, as are other copied-payload producers and the no-action
+missing-GL escalation.
 
 
 ### Copied Bill card-source ownership
@@ -2260,7 +2220,7 @@ is authorized by these read checks.
 
 ### Generic event payload domain checks
 
-MCP `agent_event` list/count/page, single-get and batch-get now apply the shared
+MCP `agent_event` list/count/page, single-get and batch-get apply the shared
 request/execution domain policy to event payloads as well as the existing
 organization, entity, task and mailbox policy. Named transactions must exist in
 the event entity and be readable under their stored type; supplied type labels
@@ -2271,9 +2231,8 @@ entity binding still apply.
 
 Admin event operations retain their existing admin-role gate. Provider-email
 source binding continues to use the mailbox-only predicate to avoid recursively
-constructing the domain graph. This does not certify arbitrary narrative or
-unmapped producer fields and retained import-run bindings; those
-remain open QA coverage. Read permission does not authorize retries or mutations.
+constructing the domain graph. Arbitrary narrative, unmapped producer fields and retained import-run bindings
+are not checked. Read permission does not authorize retries or mutations.
 
 
 ### Transaction import event references
@@ -2288,7 +2247,7 @@ unauthorized references hide the event on all generic read surfaces.
 
 This changes event reads only. Transaction update-on-duplicate remains unsupported
 and skipped by the importer; validating hostile updated arrays does not add update
-support. Binding the event to its retained import record remains open coverage. Import execution and recovery permissions are unchanged.
+support. Binding the event to its retained import record is not checked. Import execution and recovery permissions are unchanged.
 
 
 ### Master-data and card import event references
@@ -2305,13 +2264,12 @@ their own employee's records, while the existing broad membership roles retain
 their wider access. Caller-supplied role labels do not grant that access. The
 existing event payload domain, organization, entity, task and mailbox checks also
 apply. Unknown importer types, mismatched event types and malformed arrays fail
-closed. This checks referenced record access; it does not yet prove the event's
-binding to a retained import run or certify arbitrary copied narrative.
+closed. This checks referenced record access; it does not prove the event's binding to a retained import run or certify arbitrary copied narrative.
 
 
-### Agent visibility — deployed 2026-10-20
+### Agent visibility
 
-The approved replacement separates agent-output visibility from business-action
+Agent-output visibility is separate from business-action
 permissions. Role and direct-user grants are additive; owners/admins retain
 organization/entity-scoped defaults. Non-admin users start with no grants.
 Access includes historical and future outputs, including sensitive payroll data,
@@ -2327,9 +2285,6 @@ agents' own service roles (roles held by an agent's no-sign-in user) are not off
 `agentAccess.grant` refuses them: no person holds them, so a grant would reach no one; an
 earlier grant to one is listed as having no effect and can be removed. The Roles page
 entry was removed with the old team role routes on 2026-10-30.
-Reader integration shipped with PR403; production rollout was verified on 2026-10-20. The canonical workflow
-and permissions plan tracks producer scope, reader parity, tests and rollout.
-
 
 General agent
 runtimes have organization-wide data authority, so their output scope includes
@@ -2343,20 +2298,19 @@ New runs record scope at publication. Runs retained from before the migration
 remain unclassified on resume and are not automatically granted visibility.
 Saga owners are explicit at creation; publishing a classified child's output adds
 its entity scope to the saga. An unclassified child invalidates the parent's
-classification until retained content is explicitly reviewed. The reviewed run-history repair on 2026-10-20 restored 2,203 runs; other retained
-artifact types still require their own ownership review.
+classification until retained content is explicitly reviewed. Other retained artifact types are not classified automatically.
 
-In production, Dashboard run list/detail predicates and
-MCP run get/list/count predicates now use the shared grant and certified-scope
+Dashboard run list/detail predicates and
+MCP run get/list/count predicates use the shared grant and certified-scope
 check. Dashboard definition statistics, recent runs, run metrics, pipeline history
 and usage summaries also filter runs before returning activity or totals. An
 authorized run output does not require an additional payroll domain grant.
 Existing business-action checks remain separate.
 
 
-### Assignment and auxiliary readers — deployed 2026-10-20
+### Assignment and auxiliary readers
 
-The deployed implementation applies the shared grant/scope check to saga pages,
+The shared grant/scope check applies to saga pages,
 phase counts and child runs. A visible parent does not reveal a child owned by an
 ungranted agent. Phase numbers remain stable action identifiers; hidden dependency
 links are omitted. Event and memory reads use the same grant store. New event and
@@ -2375,17 +2329,10 @@ and attachment permissions remain separate. Generic saga creation by a human
 requires stored owner/admin membership and an explicit `owner_agent_type`; a worker
 uses its authenticated installed agent identity.
 
-These changes are deployed through PR403. Real Auth0 browser verification and the
-approved 20-reader capacity profile passed locally with JIT on and off. The
-60-reader overload failed; full production workload capacity is not certified.
-Legacy artifacts beyond the reviewed runs remain open. See the canonical
-workflow/permissions plan for deployment and recovery evidence.
-
-In production, refreshed run/saga/definition pages hide cached
+Refreshed run/saga/definition pages hide cached
 content after an access refusal. Temporary server errors may retain the loaded
 view. Revocation applies on the next read and cannot retract copied/downloaded
-outputs. Real Auth0 login was verified against synthetic local authorization fixtures;
-production identities were unchanged. Deployed acceptance remains separate.
+outputs.
 
 
 ### Restored historical run visibility — 2026-10-20
@@ -2470,20 +2417,19 @@ query found no hidden memories created or updated in that window. One hundred
 older memory entries remain hidden; this does not mean they have expired.
 
 
-### Pipeline submit receipts (1.1.0, local/unreleased)
+### Pipeline submit receipts
 
-`submit_workflow` 1.1.0 uses the shared gateway's durable submission receipt after
+`submit_workflow` 1.1.0 is an opt-in block revision that uses the shared gateway's durable submission receipt after
 standalone validation. Repeated identical intent returns recorded outcomes;
 unknown or in-progress attempts require reconciliation and cannot be retried as
 new effects. A pending workflow or a claim is not proof of financial completion.
 A new business operation needs a distinct legitimate reference, not a changed
 field intended to bypass an uncertain earlier attempt. Do not delete claims.
 
-The retained 1.0.0 block remains available under its original hash; it still has
-its historical outer-guard limitations. Review and activate pipeline revisions
-through supported release controls to adopt 1.1.0. Do not edit saved version/hash
-pins or assume installing code has upgraded an existing pinned pipeline. No
-production activation is included in this implementation.
+Version 1.0.0 remains the default and does not use the durable receipt. A
+pipeline keeps the block version it pins; to adopt 1.1.0, review and activate a
+pipeline revision through the supported release controls. Do not edit saved
+version/hash pins.
 
 
 ### Connection-owned response resolution

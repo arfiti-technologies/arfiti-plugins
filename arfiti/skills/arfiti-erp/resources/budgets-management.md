@@ -1,9 +1,8 @@
 # Budget Management
 
-## Dimension selection (branch implementation)
+## Dimension selection
 
-The branch implementation (migration 644; not deployed) accepts the shared
-`dimension_filter` on exact-contract budget reports. Actuals must match both the
+Exact-contract budget reports accept the shared `dimension_filter`. Actuals must match both the
 stored budget scope and the report selection. Omitted budget dimensions are
 wildcards. Fully included scopes retain their whole budget; disjoint scopes are
 excluded. A partial intersection has selected actuals but a null, unallocated
@@ -11,13 +10,11 @@ budget and no variance verdict. Dependent aggregate budgets/variances remain nul
 do not prorate or replace them with zero. Overlapping scopes inside the selection
 still block additive totals.
 
-## Report correctness contract (migration 630)
+## Report correctness contract
 
-Variance reports now use the shared SQL report engine (migration 630). Require version and line currency to equal functional currency. Match every stored dimension, optional party and project; overlapping scopes are not additive. Custom periods take precedence over validated fiscal periods. Zero variance is neutral; future/partial periods are unassessed. Unbudgeted P&L residuals stay visible, while balance-sheet accounts appear only when budgeted. Prefer the exact `budget_actual` report; read its quality, coverage and effective cutoff.
+Variance reports use the shared SQL report engine. Require version and line currency to equal functional currency. Match every stored dimension, optional party and project; overlapping scopes are not additive. Custom periods take precedence over validated fiscal periods. Zero variance is neutral; future/partial periods are unassessed. Unbudgeted P&L residuals stay visible, while balance-sheet accounts appear only when budgeted. Prefer the exact `budget_actual` report; read its quality, coverage and effective cutoff.
 
-Requires the matching migration/server release; code availability is not deployment evidence.
-
-> **MSEO release contract:** Budget dimension IDs already identify masters. Preserve supplied amounts and classification IDs, including during version copy. Detailed variance uses stored classification scope and actual fiscal-period boundaries; overlapping scopes are not additive. See the dimensions-management resource for assignment, approval and compatibility rules.
+> **MSEO contract:** Budget dimension IDs already identify masters. Preserve supplied amounts and classification IDs, including during version copy. Detailed variance uses stored classification scope and actual fiscal-period boundaries; overlapping scopes are not additive. See the dimensions-management resource for assignment, approval and compatibility rules.
 
 Comprehensive guide to multi-version budgeting with approval workflows, variance analysis, dimension tagging, and project/employee budgeting.
 
@@ -1234,7 +1231,7 @@ query("budget_template", query="", filters={"legal_entity_id": 13, "is_active": 
 **Related Resources**: [Projects](projects-management.md), [Dimensions](dimensions-management.md), [Accounts](accounts-management.md), Unified Transactions
 
 
-### Dimension-aware bulk upsert (deployed in PR #224, October 2026)
+### Dimension-aware bulk upsert
 
 Bulk upsert matches a line by version, account, period, party/project scope,
 and its canonical dimension combination. Different departments are separate lines;

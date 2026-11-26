@@ -775,7 +775,7 @@ query rules do not classify sensitive data embedded in arbitrary free text or
 legacy manual salary records without identifiable provenance.
 
 
-### Storage task visibility (QA branch; not deployed)
+### Storage task visibility
 
 The bill-upload list requires AP read and the caller's entity scope. Its review
 task link and status additionally require the shared task/thread read policy,
@@ -787,11 +787,11 @@ change the stored task or grant access to its payload.
 Display redaction does not make the upload safe to retry. Reprocess eligibility
 uses the actual case, task and live-event state before display fields are hidden;
 posted or active work remains refused. Do not re-upload or edit task references
-to bypass an access refusal. Arbitrary case narratives and unmapped metadata
-remain outside this bounded task-authority verification.
+to bypass an access refusal. Free-text case narratives and unmapped metadata are
+not classified by this check.
 
 
-### Storage bill transaction references (QA branch; not deployed)
+### Storage bill transaction references
 
 A posted invoice link and number are displayed only when the current transaction
 exists, is an AP invoice in the upload's entity, and the caller has AP read
@@ -803,10 +803,10 @@ without a posted invoice remain available within the existing upload scope.
 Payroll access or wildcard grants do not turn a non-AP transaction into the bill
 producer's AP invoice reference. Hiding a missing or unreadable invoice link does
 not reset the upload or enable Reprocess. Case narratives, raw error text and
-unmapped metadata remain separate acceptance work.
+unmapped metadata are not classified by this check.
 
 
-### Storage case outcomes (QA branch; not deployed)
+### Storage case outcomes
 
 A case's draft revision and supported outcome references must be readable before
 Storage shows its case state, outcome detail or associated error text. This check
@@ -818,5 +818,5 @@ apply to supported nested references but do not waive draft AP-invoice identity.
 The actual case/event state still determines retry eligibility first. A hidden
 case cannot make active or posted work reprocessable. Storage shows a generic
 processing/failure state when case details are withheld. Untyped free-text
-references, duplicate-number narratives and errors without a bound case remain
-separate acceptance work; this is not semantic classification of arbitrary prose.
+references, duplicate-number narratives and errors without a bound case are not
+classified; this is not semantic classification of arbitrary prose.

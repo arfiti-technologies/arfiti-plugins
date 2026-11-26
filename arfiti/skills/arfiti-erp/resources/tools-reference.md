@@ -189,10 +189,9 @@ generate_report("list", {"category": "financial"}) // Financial only
 
 ## submit() — Schema Discovery Required
 
-Local R0 update (not yet deployed): a sole registered typed payload-validation
-refusal can return `success: false`, `refused: true`, `reason_code`, and the human
+A sole registered typed payload-validation refusal returns `success: false`, `refused: true`, `reason_code`, and the human
 `message`, with validation errors and field hints preserved. Mixed, unknown-code
-and ordinary validation failures keep their legacy response. Do not infer that
+and ordinary validation failures return the ordinary validation response. Do not infer that
 an execution failed without effects from an error code alone.
 
 If saving a durable task's refusal receipt cannot be confirmed, the response is
@@ -202,7 +201,7 @@ retry posting. This transport rule adds no country or accountant policy and does
 not require a Saga.
 
 
-Local AR-273 recovery update (not deployed): ordinary submissions also retain
+Ordinary submissions retain their
 request identity before dispatch, fail closed if replay protection is unavailable,
 and never release an uncertain outcome merely because an exception or timeout
 occurred. Keep the same key for transport retries. Generic execution failures
@@ -712,7 +711,7 @@ approval step requires there to be no other eligible approver.
 membership and access to the entity, including when invoked through MCP.
 
 
-#### Client-organization creation readiness (hardening branch, unreleased)
+#### Client-organization creation readiness
 
 For `manage_organization(action="create_client")`, success confirms organization
 creation, not full accounting setup. Check `schema_created`, `config_copied`,
@@ -720,10 +719,10 @@ creation, not full accounting setup. Check `schema_created`, `config_copied`,
 account mappings refuse copying; unexpected copy/setup failures expose a generic
 issue, not raw SQL. Profile failure rolls back T1 setup but leaves earlier organization
 stages intact. Do not automatically repeat creation or change account flags to recover.
-A general resume operation for a partially created MCP client remains unfinished.
+There is no operation that resumes a partially created client organization.
 
 
-### Bank-line rollback refusals (local AR-273 update)
+### Bank-line rollback refusals
 
 For direct/immediate `bank_statement_line.match`, `unmatch` and `exclude`, a
 confirmed refusal proves only the exact attempted bank mutation rolled back.
@@ -747,7 +746,7 @@ can still execute automatically; final-review bank failures use the saved proof
 and recovery described above.
 
 
-### Card-line rollback receipts (AR-273, local; not deployed)
+### Card-line rollback receipts
 
 `card_statement_line.match`, `unmatch` and `exclude` can return a confirmed refusal
 only after the operation's owned database transaction has acknowledged rollback.
@@ -786,7 +785,7 @@ unavailable operation. This proves no posting by this attempted capability, not
 that the card has no previous posting or that another operation is safe.
 
 
-### Pending review request versus pending submission (local, not deployed)
+### Pending review request versus pending submission
 
 `agent_request.create` returns the request's `status: pending` while its successful
 creation receipt carries `operation_status: completed`,
@@ -799,8 +798,8 @@ resolve a `posting_unknown` outcome.
 
 ### Pre-dispatch refusal and retry identity
 
-Local correction (2026-10-24, not deployed): MCP wrong-tool/deprecated-type,
-empty-payload, entity-scope and missing-definition gates can retain their exact
+MCP wrong-tool/deprecated-type,
+empty-payload, entity-scope and missing-definition gates retain their exact
 refusal when the server proves the check preceded operation execution and no
 onboarding reconciliation effect was attempted. The dashboard missing-definition
 gate has the same pre-execution boundary. Retry the same request identity to read

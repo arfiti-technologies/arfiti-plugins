@@ -343,7 +343,7 @@ When an allocation links documents, the admin dashboard provides navigation:
 - [Accounts Management](accounts-management.md) - Chart of accounts
 
 
-### Currency and dimension repair (deployed in PR #224, October 2026)
+### Allocation currency and dimensions
 
 Document-linked posting interprets document-linked allocation amounts in the source
 transaction's document currency; standalone runs use the entity functional currency.
@@ -352,9 +352,9 @@ journal dimension map; incomplete or duplicate type slots are rejected. Posted
 history is not rewritten. Historical allocations created with the old EUR default
 need reviewed reversal/recreation; the original evidence must be retained.
 
-Allocation posting and run/history updates now share one database transaction and
+Allocation posting and run/history updates share one database transaction and
 lock the run. Void uses the common reversal service on the actual posted journal,
 retaining its original currency amounts and dimensions even if run inputs changed.
 The reversal is linked to the original and dated in an open period. Admin presents
 allocation documents as journals in GL impact, avoiding a misleading invoice-style
-comparison of both debit and credit line totals. This repair is pending deployment.
+comparison of both debit and credit line totals.

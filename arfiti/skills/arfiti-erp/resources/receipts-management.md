@@ -1,17 +1,16 @@
 
 
-## Receipt lifecycle correction (implementation; deployment pending)
+## Receipt status and agent authority
 
-The purchase projection now distinguishes attached evidence (`draft`, Ready to submit, employee action) from `processing` (Sent for review) and `review` (Being reviewed). Migration 639 refreshes the tenant and template views without modifying receipts, provider rows, or GL. It does not repair existing posting holds.
+The purchase projection distinguishes attached evidence (`draft`, Ready to submit, employee action) from `processing` (Sent for review) and `review` (Being reviewed).
 
-A pending-posting Bill result is counted as held and its reason is included in the run summary. It must not be reported as No attachments processed. For agent-bound workflow completion, current run authority is reloaded through the agent authority gate; authored agents still require their creator's current membership, while human submissions retain the human membership gate.
+For agent-bound workflow completion, current run authority is reloaded through the agent authority gate; authored agents still require their creator's current membership, while human submissions retain the human membership gate.
 
-Recovery of the QA receipt requires confirming the exact stored refusal, absence of a workflow/transaction for its immutable candidate, and no active processing before reopening that candidate for one retry. Time elapsed or a missing workflow ID alone is not proof that retrying is safe.
+Before reopening a refused receipt for one retry, confirm the exact stored refusal, that no workflow or transaction exists for its candidate, and that no processing is active. Time elapsed or a missing workflow ID alone is not proof that retrying is safe.
 
+Provider/card-feed status `posted` does not prove GL posting. Check the linked posted transaction and posting state separately. Attaching a receipt files evidence and never touches the GL; explicit submission starts processing that can post accounting (see the sections below). Purchase workspace: `/transactions/card-purchases`.
 
-> **Production verification note (2026-10-06):** Provider/card-feed status `posted` does not prove GL posting. Check the linked posted transaction and posting state separately. Attaching a receipt files evidence; explicit submission starts the bill pipeline, which can produce an AP bill and settlement accounting. The historical blanket statement below that the entire receipt lifecycle never touches GL is too broad; it applies to attachment itself. Current purchase workspace: `/transactions/card-purchases`.
->
-> In QA, an upload-only purchase displayed Being reviewed before submission. A later submitted receipt was held with `pending_posting=true`, no workflow ID, and an incorrect No attachments processed summary. These remain open issues. A completed agent run is not proof of posting or settlement; inspect the document outcome and linked accounting records, and do not resubmit a pending-posting document blindly.
+A completed agent run is not proof of posting or settlement; inspect the document outcome and linked accounting records, and do not resubmit a held document blindly.
 
 
 ## Card purchase policy
@@ -574,8 +573,8 @@ invoice concern, not a receipt one. See
 A saved agent revision stays as it is until a newer compatible release is activated, and a Bill follow-up run pinned to an older revision behaves as that revision did: its summary may omit a pending-posting result, so read the run's structured outcome rather than the summary, and its emails may carry earlier footer wording. Older revisions never skip current authorization checks.
 
 
-## Card receipt posting and dimension recovery (2026-10-06)
+## Card receipt posting and dimension recovery
 
 Documentation acceptance, source GL posting and AP settlement are independent. If a receipt has already produced a bill but the card charge is unposted, process the existing source through the Bank agent in card mode, scoped by `legal_entity_id` and `card_transaction_ids`. Verify `posted_transaction_id`; then link the existing bill through `card_purchase.manage` and settle through `reconciliation.match` with scope `ap` and the current purchase version. Do not create another bill or manually adjust expense accounts to bypass this sequence.
 
-The dimension-context change is implemented but awaits deployment verification. Cardholder defaults are used only when the transaction workflow enables `employee` as a dimension default source. A receipt uses its exact stored attachment-to-card link within the same entity; the cardholder is resolved for the posting date. Ambiguous links/history refuse processing. Explicit dimension values take precedence; reviewed Bill dimensions remain frozen. Business-purpose text is not a structured dimension assignment, and an employee's defaults do not automatically supply a project or override a product. Configure required dimensions and review missing values instead of assuming successful posting proves complete classification.
+Cardholder defaults are used only when the transaction workflow enables `employee` as a dimension default source. A receipt uses its exact stored attachment-to-card link within the same entity; the cardholder is resolved for the posting date. Ambiguous links/history refuse processing. Explicit dimension values take precedence; reviewed Bill dimensions remain frozen. Business-purpose text is not a structured dimension assignment, and an employee's defaults do not automatically supply a project or override a product. Configure required dimensions and review missing values instead of assuming successful posting proves complete classification.

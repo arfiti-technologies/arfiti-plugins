@@ -4,19 +4,18 @@ Expense capitalization validates reporting-currency balance before committing.
 If independently rounded source lines do not equal the converted total, the
 operation refuses with a rounding-allocation explanation and rolls back all
 capitalization writes. It does not silently distribute the difference or choose
-an accountant's rounding policy. A reporting-currency rounding allocation is not
-implemented by this correction.
+an accountant's rounding policy. There is no reporting-currency rounding allocation.
 
-AR-548 correction (merged in PR #467, 28 October 2026): acquire-from-bill records initial cost,
+Acquire-from-bill records initial cost,
 zero accumulated depreciation and equal net book value for its new book.
 Lifecycle posting can insert a missing legacy value row using the stored book's
 asset/entity identity. This retains disposal-before-depreciation history; it does
 not bulk-repair previously disposed assets. Historical repairs remain separate.
 
 
-## Dimension selection (migration 656)
+## Dimension selection
 
-Asset reports (migration 656, live) select assets by their
+Asset reports select assets by their
 current recorded dimension assignments as of the entity business date. This is
 explicitly disclosed even when the valuation date is historical; it does not
 reconstruct past departmental ownership. Existing book, currency and historical
@@ -34,11 +33,9 @@ as numeric strings, dates `YYYY-MM-DD`, choice = one option `value`. Filter
 with `query("fixed_asset", filters={"custom_fields.<key>": value}). An update names the asset's `legal_entity_id`.
 All rules (register, types, required fields, transactions, filters, import, merge): the custom-fields resource; full contract `docs/GUIDES/GUIDE_CUSTOM_FIELDS.md`.
 
-## Report correctness contract (migration 630)
+## Report correctness contract
 
-The shared asset register (migration 630) returns server totals and paged rows from a retained snapshot. Held, draft, disposed and unknown assets are counted separately. Historical valuation without reconstructable book history is null; do not substitute current values. Book/currency mismatches and conflicting disposal history are explicit gaps. Combined depreciation/impairment does not support a separate impairment figure or certified GL tie-out.
-
-Requires the matching migration/server release; code availability is not deployment evidence.
+The shared asset register returns server totals and paged rows from a retained snapshot. Held, draft, disposed and unknown assets are counted separately. Historical valuation without reconstructable book history is null; do not substitute current values. Book/currency mismatches and conflicting disposal history are explicit gaps. Combined depreciation/impairment does not support a separate impairment figure or certified GL tie-out.
 
 This guide explains how to manage fixed assets in the AI-Native ERP system.
 
@@ -840,10 +837,10 @@ that mapping or change a header account into a leaf as an automatic setup repair
 profile rows require separate review and are not removed by template initialization.
 
 
-### AR-951 extraction candidate — not released
+### Expense capitalization carrying value
 
 `capitalize_expense` treats each `capitalize_amount` as entity functional carrying
-value. The extracted posting helper writes functional/reporting GL amounts and
+value. The posting helper writes functional/reporting GL amounts and
 matching transaction-line links, retaining the selected conversion evidence.
 Required rates must be observed positive rates; missing-rate fallback is refused
 for capitalization. Country/company capitalization policy remains outside this
@@ -871,13 +868,10 @@ not approve, reserve source capacity or post. Submit the saved payload with its 
 in `_asset_action_id`. A new transport key cannot replace that action identity.
 Changed plans require reconciliation. External callers do not need a native task.
 
-Preparation requires installed immutable-plan retention guards (candidate migration
-808; fresh local replay passed, final release numbering remains open). Completion uses
-verified source coverage and current posted accounting evidence, not an agent's
-claimed asset IDs. Missing coverage remains waiting for recovery. These native
-hooks are extracted, but broader native lifecycle and release verification remain
-open; retained action guards must not be removed to bypass that work.
-This branch is not ready to release and makes no historical repair.
+Preparation requires the immutable-plan retention guards to be installed; without
+them it is refused. Completion uses verified source coverage and current posted
+accounting evidence, not an agent's claimed asset IDs. Missing coverage remains
+waiting for recovery. This makes no historical repair.
 
 
 For native request recovery, inspect current source coverage and the request's
@@ -885,8 +879,8 @@ server-written closure fields. Never supply `closed_reason` or
 `closed_transition_id` in `agent_request.update`; those inputs are refused.
 Reopened work cannot reuse earlier closure evidence. Pre-tool lock contention uses a server-proven, policy-limited admission retry;
 model output cannot manufacture this proof. After binding, recover existing
-effects rather than assuming a retry is safe. The extraction is not released.
-### Depreciation dimension allocation (unreleased AR-383 work)
+effects rather than assuming a retry is safe.
+### Depreciation dimension allocation
 
 Depreciation groups only assets sharing account, project, employee and all stored
 dimension identities. Different departments receive separate debit and credit

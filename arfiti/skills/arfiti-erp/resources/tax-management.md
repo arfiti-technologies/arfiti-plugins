@@ -1,9 +1,8 @@
 # Tax Management
 
-## Dimension selection (branch implementation)
+## Dimension selection
 
-The branch implementation (migration 643; not deployed) selects whole booked
-tax components through linked GL business lines. Reversals follow verified original
+Tax reports select whole booked tax components through linked GL business lines. Reversals follow verified original
 GL-line provenance. Selection is non-additive: a component can appear in more than
 one dimension selection, and no departmental tax allocation is implied. Missing
 link evidence makes dependent amounts unavailable with an explanation; never infer

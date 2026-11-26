@@ -1550,7 +1550,7 @@ When a vendor is updated and a link with sync enabled exists (`vendor_to_custome
 This guide covers complete vendor management including all database fields, workflows, query tools, metadata usage, and operational best practices for Claude.ai automation.
 
 
-### Unreleased vendor-note access clarification
+### Vendor-note access
 
 The Admin vendor detail page keeps Bill processing notes visible to existing
 readers, but editing requires the server-derived `canEdit` hint: current membership

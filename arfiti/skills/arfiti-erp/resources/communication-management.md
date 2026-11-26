@@ -70,6 +70,12 @@ Each legal entity can have multiple email addresses for different purposes. When
 {purpose}.{entity_code}.{org_slug}@mail.arfiti.com
 ```
 
+A company set up before the move to `mail.arfiti.com` may also hold the same
+address on `mail.ar-ti-fi.com`; mail to that address is forwarded to the
+`mail.arfiti.com` one. `query("entity_email")` lists both rows. Onboarding and
+the Admin entity page show one address per mailbox: the `mail.arfiti.com` one
+when it exists. Give people that address.
+
 **Examples:**
 
 | Address | Purpose | Entity |
@@ -571,7 +577,7 @@ a valid batch ID does not override a conflicting, missing or cross-entity one.
 Thread siblings and execution metadata using the shared request policy inherit
 this boundary. Payroll authorization changes domain visibility, not entity scope.
 
-### Resumed request outcomes (QA branch)
+### Resumed request outcomes
 
 A readable request does not automatically make its resumed execution readable.
 Admin's request outcome reader checks the resumed run and its definition belong

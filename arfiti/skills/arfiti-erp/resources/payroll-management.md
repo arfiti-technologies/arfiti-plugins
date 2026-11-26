@@ -1405,11 +1405,11 @@ payroll as paid or invent bank confirmations to clear the checklist.
 Payroll payment batch lines keep `PAY-RUN-{run_id}`. Confirmation clears that exact run's net-pay or direct authority liability, retaining source master employee/vendor IDs and dimensions on both liability and bank lines. Employee settlement uses SALARY_PAYMENT; direct authority settlement uses BANK_WITHDRAWAL. Configured tax-bill vendors still settle AP bills. Full amounts in functional currency are supported; partial payments, fees, foreign currency, ambiguous sources and inactive dimensions require review. See [payment batch confirmation](payment-batch-management.md#payroll-batch-confirmation-source-liabilities-and-dimensions). Do not treat the payroll run's `paid` status alone as proof of cash settlement.
 
 
-## Close evidence update (b1, awaiting deployment)
+## Payroll evidence in close checks
 
-The close check does not infer payroll absence from a scan. Seeded periods without runs continue to fail with “payroll absence not established; payroll applicability policy not configured”. Diagnostic evidence lists the adjacent-month window, salary/benefit account nets, accrued-payroll movement, compensation and employee count in functional currency, plus the most recent earlier net-debit month. No periods with non-run evidence warns “Not determined: payroll source policy not configured”; no periods and no signal retains the existing not-applicable result with an explicit absence caveat. Void/canceled payment documents do not settle a run. Carried payroll policy remains future work.
+The close check does not infer payroll absence from a scan. Seeded periods without runs fail with “payroll absence not established; payroll applicability policy not configured”. Diagnostic evidence lists the adjacent-month window, salary/benefit account nets, accrued-payroll movement, compensation and employee count in functional currency, plus the most recent earlier net-debit month. No periods with non-run evidence warns “Not determined: payroll source policy not configured”; no periods and no signal returns not-applicable with an explicit absence caveat. Void/canceled payment documents do not settle a run.
 
-The local calculation integrity follow-up also refuses totals that would round
+Payroll calculation also refuses totals that would round
 differently in the current Decimal detail builder and PostgreSQL `numeric(15,2)`
 columns (for example, a `200.005` total versus `200.00` detail). Submit explicitly
 rounded, consistent amounts; this does not choose a country tax-rounding method.
@@ -1417,17 +1417,14 @@ Compatible fractional inputs remain accepted. With zero total deductions, omitte
 or null itemization is allowed; positive totals require matching details.
 
 
-### Payroll schema guidance rollout
+### Payroll schema guidance
 
 The field contract comes from the current validator, while nested payroll guidance
-also comes from stored workflow definitions. Draft migration
-`775_payroll_calculation_contract_guidance.sql` aligns active standard definitions
-with tax-side pairing, deduction itemization and current stored-precision checks.
-It changes guidance only: required organization policy, approval steps and custom
-definitions are preserved. Customized guidance may therefore need a separate owner
-review; it cannot relax validator integrity checks. Empty field lists stay empty.
-The migration number must be reconciled with merge order before publication.
-This candidate has not been deployed or applied to production.
+also comes from stored workflow definitions. Active standard definitions carry
+guidance for tax-side pairing, deduction itemization and stored-precision checks.
+Required organization policy, approval steps and custom definitions are kept as
+they are, so customized guidance may need a separate owner review; it cannot relax
+validator integrity checks. Empty field lists stay empty.
 
 ### Employee assignment and nested payroll command scope
 
@@ -1443,21 +1440,15 @@ Public employee update schemas continue to require list blocks. Normalizing
 internal object/JSON forms before the scope check does not advertise those forms
 as accepted public payloads or bypass downstream validation.
 
-### Stored payroll runs in configured reviews (AR-427 candidate)
+### Stored payroll runs in configured reviews
 
-The local reader correction derives review access scope from the stored payroll run in the current organization when an operation accepts only `payroll_run_id`. Do not add a `legal_entity_id` field to an operation schema that forbids it. A supplied entity hint, where supported, must agree with the stored run; missing or ambiguous runs are refused. Reviewers still require current payroll read authority and entity access. Approval lanes and approver rules remain organization-configurable.
+Review access scope is derived from the stored payroll run in the current organization when an operation accepts only `payroll_run_id`. Do not add a `legal_entity_id` field to an operation schema that forbids it. A supplied entity hint, where supported, must agree with the stored run; missing or ambiguous runs are refused. Reviewers still require current payroll read authority and entity access. Approval lanes and approver rules remain organization-configurable.
 
-Delivery status: local database and review-path acceptance passes; review/CI delivery is pending. Without certified rollback proof, reviewer assignment failure returns conservative HTTP409 uncertainty and same-key replay does not execute again. The bounded initial-assignment proof candidate is tracked in AR-948 below. See the active user-workflows and permissions plan. This correction is not deployed.
-
-
-### Initial reviewer denial recovery (AR-948 local candidate)
-
-For the audited initial payroll review-assignment path, an acknowledged owned rollback can return `reviewer_access_denied` with `effect_outcome=no_effect`. The saved refusal replays under the same request identity even after reviewer access is restored; it does not execute the original request. A failure to persist that receipt remains uncertain and retains retry protection. Nested transactions, unsupported failures and old uncertain claims do not acquire proof merely because no workflow row can be found. Do not submit an uncertain operation under a new identity to bypass reconciliation. This candidate is not delivered or deployed; remaining acceptance is tracked in the active plan.
-
-For older uncertain requests, preserve the original identity and inspect the stored request, workflow/action receipts and operation-specific effects through authorized reads. Missing workflow rows are insufficient proof. If a trusted outcome cannot be established, leave the request unresolved; do not clear its claim or create another identity. Any production repair needs a separately reviewed, explicitly approved procedure. The AR-948 candidate does not perform such repairs.
+Without certified rollback proof, reviewer assignment failure returns a conservative HTTP 409 uncertainty and same-key replay does not execute again. The initial-assignment recovery below is the bounded case with proof.
 
 
-Delivery status (2026-10-26): the bounded initial reviewer-refusal recovery from
-PR443 is merged into main (fed599071), without deployment. The payroll scope fix
-from PR440 is integrated locally with that main and awaits final hosted CI and
-merge. Repository delivery does not activate a policy or change running services.
+### Initial reviewer denial recovery
+
+For the audited initial payroll review-assignment path, an acknowledged owned rollback can return `reviewer_access_denied` with `effect_outcome=no_effect`. The saved refusal replays under the same request identity even after reviewer access is restored; it does not execute the original request. A failure to persist that receipt remains uncertain and retains retry protection. Nested transactions, unsupported failures and old uncertain claims do not acquire proof merely because no workflow row can be found. Do not submit an uncertain operation under a new identity to bypass reconciliation.
+
+For older uncertain requests, preserve the original identity and inspect the stored request, workflow/action receipts and operation-specific effects through authorized reads. Missing workflow rows are insufficient proof. If a trusted outcome cannot be established, leave the request unresolved; do not clear its claim or create another identity. Any repair needs a separately reviewed, explicitly approved procedure. This recovery does not perform such repairs.

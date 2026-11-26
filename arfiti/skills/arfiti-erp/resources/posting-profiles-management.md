@@ -459,7 +459,7 @@ submit(object_type="posting_profile", operation="create", data='{
 - [Tax Management](tax-management.md) — Tax-related posting profiles
 - [Payroll Management](payroll-management.md) — Payroll posting profiles
 
-### Header accounts (hardening branch, unreleased)
+### Header accounts
 
 Profile create/update requires an active non-header account in the selected entity.
 Do not choose a grouping/header account or infer posting permission from its name.
@@ -467,19 +467,18 @@ Template initialization skips a profile if any specified side is missing, inacti
 a header, exposing `summary.posting_profile_setup_gaps`; only deliberately empty sides
 retain nullable bank-aware behavior. Resolve gaps with a reviewed eligible account,
 not by toggling the header flag or guessing a child account. Existing profiles are not
-silently repaired. The optional operator database guard protects both populated sides
-and blocks a referenced account becoming a header, even under concurrent writes and
-replication mode. AP/AR manual-entry scope activation remains separate and unfinished.
+silently repaired. A database guard that protects both populated sides and blocks a
+referenced account becoming a header is installed per schema by an operator; it is
+not enforced everywhere, so do not assume it is present.
 
-Dashboard connector setup now returns `postingProfileIssues`: connector success can
+Dashboard connector setup returns `postingProfileIssues`: connector success can
 coexist with rejected profile mappings. It requires distinct active non-header
 accounts in the connector entity and an active transaction type. Valid profile writes
 are transactional with default replacement and type linking. Dashboard organization
 copy validates populated account mappings and classification, preserves intentional
 NULL sides and maps profile links by IDs. Its `entityConfigCopyIssue` is separate from
-organization creation success. MCP organization copying now uses the same selection rules and exact profile-link
-identity, with its own transactional Python service. Manual
-permission, later account-classification changes and AP/AR scope remain separate work.
+organization creation success. MCP organization copying uses the same selection rules and exact profile-link
+identity, with its own transactional Python service.
 
 
 For `manage_organization(action="create_client")`, inspect `posting_profiles_copied`,
@@ -527,14 +526,14 @@ Do not recreate the obsolete template entry through automatic configuration repa
 supported [fixed-asset workflows](fixed-assets.md) and category account configuration.
 Existing rows are preserved and require their own reviewed retirement/replacement decision.
 
-The separate `apply_reviewed_profile_transition.py` (migration 681) supports audited
+The separate `apply_reviewed_profile_transition.py` supports audited
 retirement of the unsupported acquisition profile or side replacement in an entity with no
 retained transactions/settlements. It is privileged maintenance, not a public/MCP apply tool.
 Never manufacture its exact-hash review, consumer-quiescence attestation or accounting reason.
 Read-only review output alone is not an apply proposal. General historical profile replacement
 and AP/AR activation remain unsupported by this procedure.
 
-### Reviewed future-only FX profile replacement (unreleased, migration 696)
+### Reviewed future-only FX profile replacement
 
 `replace_fx_future` in `apply_reviewed_profile_transition.py` supports an entity
 with retained history. It changes only explicitly selected debit/credit master
@@ -559,21 +558,19 @@ apply reports the existing receipt and whether current configuration still match
 
 This does not reclassify old balances or replace AP/AR control accounts. Correcting
 old postings, partial settlement allocations and broader historical transitions
-remain separate work. No production profile or aging membership changes merely
-by installing the migration. Undo requires a new reviewed cutover; do not delete
+are not covered. No profile or aging membership changes until a reviewed cutover
+is applied. Undo requires a new reviewed cutover; do not delete
 the audit or assume restoring configuration reverses postings made since cutover.
 
-FX profile reader alignment (unreleased): `FXPostingService` now resolves both
+FX profile reader alignment: `FXPostingService` resolves both
 profile master IDs through `v_accounts_effective` for the selected entity and
 requires unique effective account numbers. Multiple active default profiles or
 duplicate effective identities are errors. Missing profiles still return
 unconfigured; constructor fallback numbers cannot replace invalid profile sides.
-A gain may credit a valid expense account. Deploy this reader together with the
-updated transition service before approving cutovers that use number overrides.
-This is a code change; migration 696 remains unchanged.
+A gain may credit a valid expense account.
 
 
-### Posting-profile request reference reads (QA branch, not deployed)
+### Posting-profile request reference reads
 
 For installed `create_posting_profile` and `fix_posting_profile_accounts`
 requests, supplied `bank_account_id` values must resolve to the request entity's
@@ -593,11 +590,10 @@ Unrelated actions retain their own contracts.
 
 Read checks do not establish profile repair completion, current active account
 configuration, copied bank samples, free-text descriptions or original email
-payload authority. Those producer snapshots and hosted acceptance remain open;
-mutation and completion verification still apply independently.
+payload authority; mutation and completion verification still apply independently.
 
 
-Bill recovery task reads (QA branch, not deployed): `fix_default_expense_account`
+Bill recovery task reads: `fix_default_expense_account`
 is Bill-specific and requires AP read access. A posting-profile create task with
 an original Bill payload also requires AP access; its explicit entity and known
 nested references are checked through the shared task graph. Generic profile

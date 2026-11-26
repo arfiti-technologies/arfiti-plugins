@@ -1,15 +1,15 @@
 # Multi-Currency Management
 
-## Verified limitation: AP payment settlement (2026-10-06)
+## FX on payment settlement
 
-A same-currency foreign AP payment can mark an invoice paid while leaving a functional-currency AP residual when the payment-date rate differs from the invoice carrying rate. Production QA confirmed EUR100 carried at USD113.55 was cleared by an AP debit of USD112.04 without a realized FX gain entry. The QA payment was reversed through the normal workflow. Until corrected, do not treat a paid invoice or balanced payment journal alone as proof of complete FX settlement; reconcile the invoice carrying amount, payment, and realized FX entry. Cross-currency invoice applications are refused during execution, although transaction.post validate_only currently accepts them. FX revaluation is a separate workflow and is not a substitute for settlement accounting.
+An AP or AR payment submitted with explicit invoice `applications` releases the invoice carrying value and posts any realized FX difference on the same payment (see Explicit invoice settlement below). A payment matched to an invoice later, without explicit applications, does not: for those, do not treat a paid invoice or a balanced payment journal alone as proof of complete FX settlement; reconcile the invoice carrying amount, payment, and realized FX entry. AP invoice applications in a currency other than the payment's are refused, including in validation. FX revaluation is a separate workflow and is not a substitute for settlement accounting.
 
 
-## Report correctness contract (migration 630)
+## Report correctness contract
 
-Shared financial reports (migration 630) use booked functional amounts and exact decimal strings. A missing legacy header functional-currency label uses the entity currency; an explicit mismatch remains a gap. Missing functional GL amounts or entity currency configuration must not be replaced with document amounts or USD/EUR. Budgets must use the same functional currency. Consolidated adapters support one shared functional currency only and remain uncertified aggregates before eliminations; no spot-rate translation fallback.
+Shared financial reports use booked functional amounts and exact decimal strings. A missing legacy header functional-currency label uses the entity currency; an explicit mismatch remains a gap. Missing functional GL amounts or entity currency configuration must not be replaced with document amounts or USD/EUR. Budgets must use the same functional currency. Consolidated adapters support one shared functional currency only and remain uncertified aggregates before eliminations; no spot-rate translation fallback.
 
-Requires the matching migration/server release; code availability is not deployment evidence.
+
 
 Comprehensive guide to multi-currency operations including exchange rate management, currency conversion, and multi-currency transaction handling.
 
@@ -1199,10 +1199,10 @@ submit(object_type="exchange_rate", operation="create", data=JSON.stringify({
 Multi-currency exchange rate management is complete and ready for use.
 
 
-## Explicit AP invoice settlement (implementation, deployment pending)
+## Explicit invoice settlement
 
 AP payments submitted with invoice applications release each invoice's original AP carrying value in functional and reporting currencies. Cash remains valued at the payment-date rate. Realized differences are GL-only lines on the same payment, with zero document-currency amounts and inherited payment dimensions. Partial applications use cumulative rounding; reversing a payment reverses these lines and restores its applications. The application record stores the functional amount actually released.
 
 The invoice and payment currencies must match, including during preflight. A rate difference requires an active, unambiguous `fx_gain_loss` posting profile in the payment entity and available configured accounts. Missing configuration refuses the entire payment; no account or balancing journal is silently created. Outstanding unreversed FX revaluation and historical foreign applications without carrying-release evidence require review before further settlement. Use normal reversal/reconciliation procedures; never alter posted GL directly.
 
-This change covers explicit `AP_PAYMENT.applications`. It does not claim equivalent realized-FX behavior for AR receipts or later matching of standalone payments. Previously posted residuals are not repaired automatically. Production verification is tracked in the workflow/permission QA plan.
+AR payments submitted with explicit `applications` release the invoices' carrying value the same way, with the debit and credit sides reversed. This covers explicit `AP_PAYMENT.applications` and `AR_PAYMENT.applications`; later matching of standalone payments does not release carrying value or post realized differences. Previously posted residuals are not repaired automatically.

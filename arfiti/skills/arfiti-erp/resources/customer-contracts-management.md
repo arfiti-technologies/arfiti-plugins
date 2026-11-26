@@ -189,14 +189,14 @@ after applying the day ratio; preview sums those rounded amounts. Renewal retain
 these terms on the new draft. A successful approved renewal records an explicit
 success receipt so a retry of the same request can return the saved outcome.
 
-## Contract term input capabilities (local, unreleased)
+## Contract term input capabilities
 
 Header create/update refuses `billing_timezone` and `auto_post_invoices` writes:
 legacy stored values do not control current billing. Header update also refuses
 `billing_timing`, `proration_strategy` and `start_date`, which this update writer
-does not implement. Their existing supported create values and renewal copies
-remain unchanged. This is a capability limit, not an accounting rule against
-changing terms; effective economic revisions remain separately designed work.
+does not implement. Their supported create values and renewal copies still
+apply. This is a capability limit, not an accounting rule against changing terms;
+effective-dated economic revisions are not supported.
 
 Line update refuses unsupported `effective_date`, `effective_from`, `effective_to`, `start_date`,
 `end_date`, `recognition_method` and `amount` instead of silently dropping them.
@@ -220,18 +220,16 @@ precede starts on create, renew or update; a null end remains unbounded. Histori
 and future terms are not prohibited by a clock rule, and evergreen does not
 rewrite supplied dates. Existing renew expiry behavior remains unchanged.
 
-Unknown unrelated input remains legacy-compatible; this is not a universal
-extra-field rejection or an all-writer amendment fix. Import/connector effectivity,
-active amendments, renewal lifecycle and deployed/custom definition rollout remain
-open. No historical rows are backfilled and no production behavior is activated.
+Unknown unrelated input is accepted for compatibility; this is not a universal
+extra-field rejection. Historical rows are not backfilled.
 
-## Contract execution and supported update results (local, unreleased)
+## Contract execution and supported update results
 
 Contract and line writes enforce the target contract's stored entity scope.
 Completion after approval re-checks the submitter's current authority and the referenced
 workflow definition's configured permission at execution; the approver does not substitute
 for the submitter. A legacy definition with no configured permission does not gain
-a new domain-permission rule from this change. Agent-authored workflows retain
+a new domain-permission rule. Agent-authored workflows retain
 shared agent authorization. Header writes lock the contract; line writes take the
 contract lock before the line lock.
 
@@ -240,8 +238,7 @@ Updates return an integer `fields_updated` and the persisted field names in
 mean every arbitrary input is supported. Discover the operation schema and read
 back required values. Renewal preserves existing `billing_timing`,
 `proration_strategy` and line `usage_metric`. It does not activate scheduled
-amendments or change the meaning of line effective dates. Effective economic
-amendments, imported billing history and definition rollout remain open in AR-474.
+amendments or change the meaning of line effective dates.
 
 
 This guide covers the full customer revenue lifecycle: creating subscription contracts, recurring billing, deferred revenue recognition (ASC 606 / IFRS 15 compliant), recognition-policy considerations, proration, amendments, and amortization runs. All operations flow through `submit()` and produce a uniform audit trail.
@@ -876,14 +873,14 @@ recognition retains the persisted run authority and capability checks; it does
 not require a human membership for the system service identity.
 
 
-### Contract workflow provenance (QA branch)
+### Contract workflow provenance
 
 Contract detail's workflow summaries are limited to the current organization,
 and each workflow definition must belong to that same organization. All matching
 branches (contract ID, recurring-contract ID, and discovered-agent source) apply
 the shared operational/domain/entity workflow read policy. A contract ID or linked
 agent reference does not itself grant workflow access. Unreadable summaries are
-omitted while the authorized contract remains available. Hosted and full-route acceptance remain separate from the isolated checks.
+omitted while the authorized contract remains available.
 
 
 Contract provenance also filters its source schedule and transaction to the
@@ -895,7 +892,7 @@ payload authority. Malformed agent UUID references are ignored without hiding an
 otherwise readable source bill. Authorized AP and payroll paths remain supported;
 these read checks neither repair historical links nor grant write authority.
 
-## Scoped billing hold decisions and evidence report (local, not activated)
+## Scoped billing hold decisions and evidence report
 
 `recurring_contract.record_hold_decision` records an explicit decision for one
 contract/entity and inclusive `start_date`/`end_date`. Supply `decision_text`,
@@ -920,7 +917,7 @@ citations are labelled caller-supplied, never certified documents.
 section, limit, cursor})` requires current `ar:read` and entity scope. Sections are
 `contracts`, `usage`, `tasks`, `decisions`; retrieve every section and follow its
 `next_cursor` until `truncated=false`. Page counts are not full-selection totals.
-Current S0 capability is distinct from historical receipt evidence; unsupported
+Current capability is distinct from historical receipt evidence; unsupported
 service has no invented engine amount. Failure count greater than one is a factual
 repeat label, not a policy threshold. Suspended/stub contracts, unbilled usage,
 open tasks and retained decisions remain visible. Usage with no resolvable stored
@@ -933,10 +930,7 @@ Decision detail compares captured contract/line/reference evidence with live dat
 labels changed/missing/unverified evidence, and exposes all superseding branches.
 A recorded decision never implies the treatment was executed. Alerts' queued,
 accepted or unknown delivery states remain separate. No global accountant policy
-or human-only close requirement is installed. Schema/catalog/guarded definition
-setup precedes code rollout; verify default new-organization cloning and preserve
-custom approval settings. Production installation and activation are not performed
-by this local change.
+or human-only close requirement is installed.
 
 ## Contract-line approval context (AR-614)
 
