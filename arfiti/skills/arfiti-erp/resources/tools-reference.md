@@ -225,18 +225,23 @@ A failed execution answers one of two things (AR-1161):
   checked.
 A `Validation Failed` with `error_stage: pre_submission` is different: the
 executor refused before dispatch and nothing ran. Fix the listed `errors` and
-submit again. The refusal is kept without expiry, so an identical payload under
-the same key replays it even after the cause is fixed elsewhere (a vendor
-created, a period reopened): pass a new `idempotency_key` to be checked again.
-A refusal with `reason_code: invalid_payload` and `effect_outcome: no_effect` is
-the same kind: the workflow's own validation (a missing required field, an
-unknown reference, a name another record already uses) refused before any
-workflow existed. `message` is the sentence, `validation_errors` the list and
-`guidance` the expected format and reference lists. Fix them and submit again;
-the same key replays the refusal.
-A replayed refusal carries `replay_hint` saying this. A task-bound submission's
-identity comes from its task, so neither a new key nor a changed payload starts a
-new request; its replay carries no hint.
+submit again. A refusal with `reason_code: invalid_payload` and
+`effect_outcome: no_effect` is the same kind: the workflow's own validation (a
+missing required field, an unknown reference, a name another record already
+uses) refused before any workflow existed. `message` is the sentence,
+`validation_errors` the list and `guidance` the expected format and reference
+lists. So are `custom_field_invalid`, `duplicate_master_data` and a workflow
+`permission_denied`. Fix the cause and send the same request again: through
+`submit`, a request whose saved answer is such a refusal is checked again with
+the current data (AR-1483), so the same payload, with or without the same key,
+gets a fresh answer once the cause is fixed (the period reopened, the vendor
+created). A request that wrote something replays its saved result as before.
+While an identical request is being checked again a second one gets
+`submission_in_progress`; retry it in a moment.
+A refusal replayed elsewhere (an agent's own submission, a task-bound
+submission) carries `replay_hint` and is not checked again. A task-bound
+submission's identity comes from its task, so neither a new key nor a changed
+payload starts a new request; its replay carries no hint.
 Pending/unknown workflows recover only from actual saved execution results;
 missing evidence requires reconciliation. Known result IDs remain available.
 
@@ -427,7 +432,7 @@ The action lists below are the tools' own action sets.
 | I want to... | Use |
 |--------------|-----|
 | Bulk import data (accounts, vendors, etc.) | `manage_imports(action="accounts", ...)` |
-| Onboard entity, run checklist, load demo | `manage_onboarding(action="start", ...)` |
+| Onboard entity, run checklist | `manage_onboarding(action="start", ...)` |
 | Org admin, roles | `get_organization(action="get_info")` |
 | Register/sync banking connectors | `manage_connectors(action="register", ...)` |
 | Agent memory, financial context | `get_agents(action="recall_memories", ...)` |
@@ -481,7 +486,7 @@ manage_onboarding(action, legal_entity_id?, task_key?, new_status?, support_type
 
 Read actions (`get_onboarding`): `check_status`, `get_checklist`, `get_support`, `verify_team_member`
 
-Write actions (`manage_onboarding`): `add_entity`, `confirm_choices`, `get_summary`, `initialize_entity`, `load_demo_data`, `reset`, `run_wave`, `start`, `update_task`
+Write actions (`manage_onboarding`): `add_entity`, `confirm_choices`, `get_summary`, `initialize_entity`, `reset`, `run_wave`, `start`, `update_task`
 
 `get_summary` is a write action: when every task is done it finalizes onboarding. Its authority rule is unchanged. There is no skill package to download: this guide is the `arfiti` plugin, installed from the marketplace `arfiti-technologies/arfiti-plugins`.
 

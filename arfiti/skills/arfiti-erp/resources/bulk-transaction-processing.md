@@ -183,6 +183,8 @@ All 30+ types defined in the transaction workflow definition are supported. Comm
 
 **Party fields are optional at the import level.** Required fields are enforced per transaction type from the workflow definition (e.g., AP_INVOICE requires vendor_id).
 
+**Payment rows** (`AP_PAYMENT`, `AR_PAYMENT`) that name a party are posted by the payment executor, so they also need `bank_account_id`, a date (`transaction_date` or `payment_date`) and an amount (`payment_amount`, or the row's `amount`, or `applications`). A preview (`validate_only`) refuses a row without them and names the field (AR-1479); before, it passed and the real run failed on the missing key. Rows with debit/credit lines, or naming no party, are posted directly and do not need a bank account.
+
 ---
 
 ## Preflight Check

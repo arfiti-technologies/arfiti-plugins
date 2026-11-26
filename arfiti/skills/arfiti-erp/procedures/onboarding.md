@@ -24,7 +24,7 @@ membership; a Controller, Viewer, role named Admin, stale owner token, or
 perform these user administration operations.
 
 This applies to `manage_onboarding` actions `start`, `confirm_choices`, `run_wave`,
-`update_task`, `reset`, `add_entity`, `initialize_entity`, and `load_demo_data`, plus template
+`update_task`, `reset`, `add_entity`, and `initialize_entity`, plus template
 repair and `legal_entity.create` / `legal_entity.rerun_onboarding_task` workflows.
 They can seed shared accounting configuration, workflow/agent definitions and
 credentials, so entity-limited administrators must ask an unrestricted owner or
@@ -35,9 +35,14 @@ access rules: `get_summary` is called through `manage_onboarding` because it can
 mark onboarding completed, but its authority is a read's, so any member may call it. New organization owners can still run first-time
 onboarding before the organization has any entities. Explicit organization IDs
 must match the connected organization; initialization/copy targets must belong
-to it. Omitting `organization_id` in the MCP initialization/demo gateway uses
+to it. Omitting `organization_id` in the MCP initialization gateway uses
 the connected organization. Switching the Admin browser login does not change
 the identity of an existing MCP connection.
+
+There is no demo data: `load_demo_data` and `start(onboarding_path="demo")` were removed
+(AR-1474) because the loader reported records it never created. Both are refused
+before anything runs. Sample records, when a person wants them, go through `submit`
+like any other record.
 
 A permission refusal must be resolved with the correct owner/admin connection,
 not by retrying through another setup tool or resetting the checklist. After a
@@ -85,7 +90,7 @@ Ask the user every row; each one changes accounting outcomes:
 
 **Moving from another system, or keeping a chart they already have?** Offer `accounting_standard="custom"` before calling `start`, and say why: a template chart, once created, is shared master data that an import adds to but does not replace, so their own chart could not take its place later. See [Custom chart of accounts](#custom-chart-of-accounts).
 
-`start` saves the checklist with whatever it was given, runs nothing (only `onboarding_path="demo"` loads demo data and completes at once), and lists each omitted choice in `material_choices_not_provided` (omitted is "not provided"; `is_vat_registered=false` is an answer, so pass it only when the person said no). Never fill in an answer for the person, including when they say "use the normal defaults": name the values you would use and ask them to confirm those. When the person declines or does not answer the VAT question, omit it; tell them nothing was recorded and that a registration can be added later with `submit(object_type="tax_registration", operation="create", ...)`. Country, chart, tax template and fiscal-year start cannot be left out: the waves do not run without them.
+`start` saves the checklist with whatever it was given, runs nothing, and lists each omitted choice in `material_choices_not_provided` (omitted is "not provided"; `is_vat_registered=false` is an answer, so pass it only when the person said no). Never fill in an answer for the person, including when they say "use the normal defaults": name the values you would use and ask them to confirm those. When the person declines or does not answer the VAT question, omit it; tell them nothing was recorded and that a registration can be added later with `submit(object_type="tax_registration", operation="create", ...)`. Country, chart, tax template and fiscal-year start cannot be left out: the waves do not run without them.
 
 **Confirmation before the first wave.** `start` returns `read_back` (each choice as given, or "not given"), `confirmation_token`, `missing_before_waves` and `confirm_call`. Show the person `read_back` as it is and end your turn. If they correct or add an answer, call `start` again with the same arguments plus the change: that replaces the saved choices and gives a new read-back and token (the old token is refused). When they say yes, call `manage_onboarding(action="confirm_choices", confirmation_token="...", person_reply="<their reply, in their words>")`; it is refused while `missing_before_waves` is not empty. Never call `confirm_choices` in the same turn as `start`. `run_wave` answers `choices_not_confirmed`, and runs nothing, until the confirmation is recorded. Once the waves have created the entity, `start` without `legal_entity_id` is refused (`onboarding_already_started`): continue with `run_wave`, and change a choice through the operations (for example `tax_registration`, `legal_entity.update`). A VAT answer of yes creates a `vat` registration row with number `PENDING` when the waves create the legal entity (not for an existing `legal_entity_id`); with no answer none is created. Record the real number with `submit(object_type="tax_registration", operation="update", ...)`; the type cannot be changed, so a wrong one is deleted (`tax_registration.delete`) and created again. For an existing entity, or a US sales-tax registration (sales tax is not VAT; `is_vat_registered` holds only the person's own VAT answer), create it: `submit(object_type="tax_registration", operation="create", ...)` with `registration_type` `sales_tax` (fields: `get_submissions(action="schema", object_type="tax_registration", operation="create")`). The `create_legal_entity` result shows `is_vat_registered: null` with `vat_registration: not provided…` when nobody answered, and `false` only for an answer of no.
 

@@ -627,6 +627,12 @@ submit(object_type="bank_statement", operation="import", data=JSON.stringify({
 }))
 ```
 
+Each line needs `transaction_date` (YYYY-MM-DD) and `amount` (signed, or absolute
+with `debit_credit`); `validate_only` refuses a line without them and names the
+field (AR-1479). `description`, `reference_number`, `external_reference`,
+`currency` and `debit_credit` are read as columns; any other key (as
+`balance_after`, `counterparty_name` above) is kept in the line's metadata.
+
 #### From CSV File
 
 When user provides a CSV file, parse and submit:
