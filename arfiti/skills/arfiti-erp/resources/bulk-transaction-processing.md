@@ -437,7 +437,7 @@ submit(object_type="transaction", operation="import", data=JSON.stringify({
 | Option | Default | Description |
 |--------|---------|-------------|
 | `on_duplicate` | `"skip"` | `"skip"` = ignore duplicates, `"error"` = fail on duplicate |
-| `batch_size` | `100` | Records per batch (transaction boundary) |
+| `batch_size` | `100` | Records processed between progress updates. Each record commits on its own (a Merit `merit_glb_id` group commits together), so a batch is not a transaction boundary |
 | `stop_on_error` | `false` | Stop entire import on first error |
 | `defaults` | `{}` | Default values merged into every record |
 | `defaults.currency_code` | - | Default currency for all records |

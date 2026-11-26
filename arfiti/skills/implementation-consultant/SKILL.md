@@ -5,19 +5,21 @@ description: Guides customers through full ERP migration — from discovery thro
 
 ## Trigger
 
-Activate when the user mentions: migrate to Arfiti, ERP migration, data migration, import my data, set up my books, move from Merit, move from QuickBooks, switch accounting systems, implementation, onboarding data, bring my data, opening balance, cutoff date, go-live, start using Arfiti, or when the user wants to transfer accounting data from an existing system (or start fresh) into Arfiti.
+Activate when the user mentions: migrate to Arfiti, ERP migration, data migration, import my data, set up my books, move from Merit, move from QuickBooks, switch accounting systems, implementation, onboarding data, bring my data, opening balance, trial balance, year end, old books end, cutoff date, go-live, start using Arfiti, or when the user wants to transfer accounting data from an existing system (or start fresh) into Arfiti.
 
 ## Before You Start — Gather Information (Phase 0)
 
-Ask these questions in plain, friendly language. Explain WHY each matters.
+Ask these questions in plain, friendly language. Explain WHY each matters. If the person asked a question ("can I put it all in on 1 April?"), answer it first from what you know and what you read; when they say not to change anything, read and explain only, and write nothing.
 
 1. **Which company are we working on?** Help find the legal entity: `query("legal_entity", filters={})`
 
 2. **Are you starting from scratch or migrating from an existing system?**
-   - If migrating: "Which accounting system are you coming from? (Merit Aktiva, QuickBooks Online, SmartAccounts, or something else?)"
-   - This determines whether we can automate the migration (connector) or need manual imports
+   - If migrating: "Which accounting system are you coming from, and what can it export?" (a trial balance at the cutoff, open customer invoices and vendor bills, the fixed asset register)
+   - No new connection to another accounting system can be set up at present (an organisation that already has one keeps syncing it from the dashboard's connectors page): the data comes in from those exports (see references/migration-paths.md). Never offer to set up a sync
 
 3. **What is the cutoff date?** Explain: "This is the date your old system stops and Arfiti takes over. For example, if you close your books in the old system on December 31, 2025, your cutoff is 2025-12-31. All balances as of this date become your opening balances in Arfiti, dated the next day (2026-01-01), the first day Arfiti runs your books." Record both dates: the **as-of date** of the source balances (the cutoff) and the **opening date** in Arfiti (normally the day after). Never treat them as one date.
+
+   **Is the cutoff the last day of your financial year?** Ask when the financial year starts and ends, then read the entity's periods: `query("fiscal_period", filters={"legal_entity_id": ENTITY_ID}, limit=50)`. If the periods in Arfiti do not follow the year the person gives, stop and say so before any import. If the cutoff is a year end, ask whether the trial balance still holds income and expense accounts (the year not yet closed to equity, for example retained earnings); see Step 7, "Income and expense accounts at a fiscal-year boundary", before proposing an opening date.
 
 4. **What does your business do?** "Knowing your industry helps me anticipate what accounts, vendors, and transaction types you'll need. For example, a SaaS company needs recurring revenue tracking, while a consulting firm needs project-based accounting."
 
@@ -29,10 +31,10 @@ Based on answers, choose the path. See **references/migration-paths.md** for the
 
 | Path | When | How |
 |------|------|-----|
-| **A — Connector** | User has Merit Aktiva, QBO, or SmartAccounts | Automated sync via `manage_connectors` |
-| **B — CSV/Manual** | User has another system (Xero, SAP, custom, spreadsheets) | Guided CSV imports |
+| **A — Connector** | Not offered at present: a new connection to another accounting system cannot be set up | — |
+| **B — CSV/Manual** | User has any accounting system (Merit Aktiva, QuickBooks Online, SmartAccounts, Xero, SAP, custom, spreadsheets) | Guided imports from its exports |
 | **C — Greenfield** | No prior system (new company, first-time accounting) | Minimal setup, build as you go |
-| **D — Hybrid** | Connector for some data, manual for the rest | Mix of A and B |
+| **D — Hybrid** | Data spread over several systems or files | Several Path B sources |
 
 ### Calculate the Gap Period
 
@@ -136,17 +138,6 @@ If pending tasks remain, run waves: `manage_onboarding(action="run_wave")` — r
 
 *Goal: Vendors, customers, employees, items, dimensions, and other master data imported.*
 
-### Path A (Connector)
-
-If user has a connector set up (Merit, QBO, SmartAccounts):
-
-```
-manage_connectors(action="sync_accounting_data", connector_id=CONNECTOR_ID,
-    entity_types=["customers", "vendors", "items", "employees", "dimensions", "fixed_assets"])
-```
-
-Review the sync results. If some entities failed, help resolve individually.
-
 ### Path B (CSV/Manual)
 
 Guide the user through each data type sequentially. For each type:
@@ -176,7 +167,7 @@ For new companies with minimal data:
 
 ### Path D (Hybrid)
 
-Connector sync for available data, then manual for the rest. Guide through both approaches.
+Import each source's export in the Path B order, and agree with the person which source is authoritative where they overlap.
 
 ### After All Imports
 
@@ -200,14 +191,7 @@ Present a summary:
 
 Explain: "Opening balances are your financial starting point in Arfiti — they show exactly where your company stood on the cutoff date. We get these from your old system's balance sheet or trial balance as of [CUTOFF_DATE]."
 
-**Path A (Connector):**
-The connector can pull the trial balance and open transactions automatically. Use the admin dashboard migration panel or:
-```
-manage_connectors(action="sync_accounting_data", connector_id=CONNECTOR_ID,
-    entity_types=["opening_balances"])
-```
-
-**Path B/C/D (Manual):**
+**All paths:**
 1. Ask user to provide the balance sheet or trial balance as of cutoff date
 2. They can paste it, upload a PDF, or type the numbers
 3. If they upload a document, use the **balance-sheet-analyzer** agent to parse it (spawn as a sub-agent)
@@ -245,7 +229,10 @@ Present findings conversationally: "Based on your balance sheet, I have a few qu
 Before the upload, two checks:
 
 - **Existing opening entries in any period.** One opening entry per entity and period is enforced, but only per period: an entry already posted in another period (for example dated 1 October when the agreed opening is 1 November) is not refused. Look for them with `query("transaction", filters={"legal_entity_id": ENTITY_ID, "transaction_type": "OPENING_ENTRY"})`; if one is wrong, reverse it first. A refusal names the existing entry under `existing_opening_entry` with its own date.
-- **Income and expense accounts at a fiscal-year boundary.** If the cutoff is the last day of a fiscal year and the trial balance still holds revenue or expense accounts (not yet closed to retained earnings), first ask for a closed trial balance (balance-sheet accounts only, the year's result already in retained earnings). If the customer cannot provide one, propose dating the opening entry on the **last day of the old year** (`opening_date`), so those lines roll into the prior-year result, state that exact date, and get the customer's agreement before posting. This is the one exception to "balances as at D open on D+1" (Andrew, 24 Nov 2026, AR-1456). It is guidance for the assistant, not a rule the server enforces. (Dated the new year's first day, those lines would fall into the new year, whose income statement is then marked incomplete until someone confirms them.) This needs `opening_balances` (or the CSV import): `opening_balances_with_subledger` takes no `opening_date` and refuses one, so with open items ask for the closed trial balance. The old year's last period must be open: a closed or locked period is refused before anything is written; it is reopened through the period operations, or the closed trial balance is used.
+- **Income and expense accounts at a fiscal-year boundary.** If the cutoff is the last day of a fiscal year and the trial balance still holds revenue or expense accounts (not yet closed to equity, for example retained earnings), say what each choice does before proposing one; the full table is in references/opening-balance-checklist.md ("At a fiscal-year boundary"). The tool posts whatever date it is given and the amounts are posted as given; the reports differ. Dated the new year's first day, an income statement covering that day comes back `quality: "incomplete"` without totals (gap `AMBIGUOUS_PERFORMANCE_JOURNAL`) and the new year's balance sheet leaves equity open, and no tool clears that. Dated the old year's last day (`opening_date`), the new year's balance sheet balances with the amount under "Prior years result (not closed)" and the new year's income statement is complete, but income statements covering the old year's last day are withheld and the balance sheet on that day has no equity total (check the import with the trial balance report). So: (1) ask for a closed trial balance first (balance-sheet accounts only), explaining which reports are withheld rather than saying "every figure will be wrong"; (2) if they cannot provide one, propose the last day of the old year, state that exact date and period, and get the customer's agreement before posting. This is the one exception to "balances as at D open on D+1" the assistant proposes on its own (Andrew, 24 Nov 2026, AR-1456), guidance for the assistant, not a rule the server enforces; (3) it needs `opening_balances` (or the CSV import), since `opening_balances_with_subledger` takes no `opening_date` and refuses one, so with open items ask for the closed trial balance; and an open last period of the old year: a closed or locked period is refused before anything is written, and reopening it is the accountant's decision; if that period does not exist because the books never ran here that year, creating it is the person's or accountant's decision (its report behaviour is untested); (4) the customer or their accountant chooses: never decide how the old year's result is closed, never post a closing entry on your own, and never present one country's year-end rule as general (point to the country pack or the accountant).
+
+- **A mid-year cutoff with year-to-date income and expense in the trial balance** has no agreed treatment. Do not drop those lines or pick a date on your own: say the case is open, ask the customer or their accountant, and state what each choice does (left out, the year-to-date result falls into the balancing account and this year's income statement covers only the time after the cutover; included, every income statement covering the opening date is withheld and the balance sheet's equity stays open for the rest of that year).
+- **What must exist before posting.** For the opening entry: the accounts it names (with `account_subtype` on the control accounts), the balancing equity account the customer chose, the customers and vendors behind any open items (import them first: the migration matches them by name and creates any it does not find, so importing avoids near-duplicates), a fixed asset category for each asset and a `fixed_asset` number series for the entity (without it the whole migration is refused), and an open monthly period containing the opening date. For the first documents after it: a posting profile for each transaction type the company uses, bank accounts for bank lines, and tax codes with their tax accounts for taxed lines. `get_onboarding(action="check_status")` reports what exists per entity (its period check is for today; read the opening date's period with `query("fiscal_period", ...)`); read the gaps back to the customer instead of assuming them.
 
 Run the upload with `validate_only=true` first. Its answer states `posting_date` and `posting_period`: tell the user "the opening entry will be dated <posting_date> (period <name>)" and wait for their agreement before posting. Never describe the entry as "as at" a date other than its `posting_date`.
 
@@ -326,9 +313,9 @@ Explain: "Your cutoff date was [DATE] but today is [TODAY], so we have [N] month
 
 Present three strategies. See **references/gap-period-strategies.md** for detailed guidance.
 
-**Strategy A — Full Transaction Import** (recommended for connector paths or clean exports):
-- Best when: you can export all transactions from the old system as CSV, or via connector
-- How: bulk import via `manage_imports(action="transactions", records=[...])` or connector sync
+**Strategy A — Full Transaction Import** (recommended for clean exports):
+- Best when: you can export all transactions from the old system as CSV
+- How: bulk import via `manage_imports(action="transactions", records=[...])`
 - Advantage: fastest, preserves original transaction details
 - Limitation: requires structured export from old system
 
@@ -345,7 +332,6 @@ Present three strategies. See **references/gap-period-strategies.md** for detail
 - Limitation: requires CSV in specific format
 
 Recommend a strategy based on path + volume:
-- Path A (connector) → Strategy A (connector sync for gap period)
 - Path B with transaction export available → Strategy A (CSV import)
 - Path B without transaction export → Strategy B (bank statements)
 - Any path with >500 transactions → Strategy C (admin bulk upload)
@@ -353,13 +339,6 @@ Recommend a strategy based on path + volume:
 ### Step 10: Execute Gap Period Strategy
 
 **Strategy A — Full Transaction Import:**
-
-For connector path:
-```
-manage_connectors(action="sync_accounting_data", connector_id=CONNECTOR_ID,
-    entity_types=["invoices", "bills", "payments", "journal_entries"],
-    from_date="GAP_START", to_date="GAP_END")
-```
 
 For CSV import:
 1. Show required format: `get_onboarding(action="get_support", support_type="import_transactions")`

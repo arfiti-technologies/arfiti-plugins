@@ -16,9 +16,9 @@ If the gap is 0 (cutoff = today or in the future), skip Phase 4 entirely.
 
 | Factor | Strategy A (Full Import) | Strategy B (Bank Statements) | Strategy C (Bulk Upload) |
 |--------|------------------------|-----------------------------|-----------------------|
-| **Best when** | Transaction export available from old system or connector | Only bank statements available, no structured export | Large volume (>500 transactions) |
+| **Best when** | Transaction export available from the old system | Only bank statements available, no structured export | Large volume (>500 transactions) |
 | **Gap length** | Any | Any | Any (but especially >3 months) |
-| **Data source** | CSV export from old system, or connector sync | Bank statement CSV/PDF | CSV in Arfiti import format |
+| **Data source** | CSV export from the old system | Bank statement CSV/PDF | CSV in Arfiti import format |
 | **User effort** | Low (export + review) | Medium (review classifications monthly) | Medium (prepare CSV in format) |
 | **Speed** | Fast (bulk import) | Slow (month-by-month) | Medium (upload + async processing) |
 | **Completeness** | High — includes non-bank transactions | Medium — only bank transactions | High — whatever is in the CSV |
@@ -27,9 +27,6 @@ If the gap is 0 (cutoff = today or in the future), skip Phase 4 entirely.
 ## Recommendation Logic
 
 ```
-If Path A (connector):
-    → Strategy A (connector can sync gap period automatically)
-
 If Path B (CSV) AND user can export transactions:
     → Strategy A (CSV import)
 
@@ -43,19 +40,10 @@ If Path C (greenfield):
     → No gap period (cutoff = today)
 
 If Path D (hybrid):
-    → Strategy A for connector data + Strategy B for manual data
+    → Strategy A for the sources with a transaction export + Strategy B for the rest
 ```
 
 ## Strategy A — Full Transaction Import
-
-### Via Connector
-```
-manage_connectors(action="sync_accounting_data", connector_id=CONNECTOR_ID,
-    entity_types=["invoices", "bills", "payments", "journal_entries"],
-    from_date="GAP_START", to_date="GAP_END")
-```
-
-The connector pulls all transaction types in dependency order and posts them to Arfiti.
 
 ### Via CSV Import
 1. Get format guidance: `get_onboarding(action="get_support", support_type="import_transactions")`
@@ -122,7 +110,7 @@ For large datasets (>500 transactions), the admin dashboard provides a more effi
 
 ### When to combine strategies:
 - Use Strategy C for the bulk of transactions, then Strategy B for a final month that's still in progress
-- Use Strategy A (connector) for most data, then Strategy B for transactions not covered by the connector
+- Use Strategy A (export) for most data, then Strategy B for transactions the export does not cover
 
 ## Post-Gap Verification
 

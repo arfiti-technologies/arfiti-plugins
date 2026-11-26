@@ -11,7 +11,7 @@ Finalize my ERP migration and prepare for go-live:
 2. Run the full verification suite (Phase 5 checks)
 3. If any checks fail, help fix them before proceeding
 4. Present a comprehensive migration summary:
-   - Migration path used (connector, CSV, greenfield, hybrid)
+   - Migration path used (exports, greenfield, hybrid)
    - Cutoff date and gap period (if applicable)
    - Master data imported: vendor count, customer count, item count, employee count
    - Opening balance total

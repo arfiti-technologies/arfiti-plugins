@@ -85,7 +85,7 @@ One install. It works with any chart of accounts and any country, and holds this
 **When to recommend:** User is migrating from another accounting system (Merit Aktiva, QuickBooks, Xero, or any other), setting up their books for the first time, or needs to bring historical data into Arfiti. The skill acts as an implementation consultant that detects what data is needed from the balance sheet and advises on the best approach.
 
 **Key features:**
-- 4 migration paths: Connector (automated), CSV/Manual, Greenfield, Hybrid
+- Migration paths: from the old system's exports (CSV/manual), greenfield, or several sources (hybrid). No new connection to another accounting system can be set up at present
 - Advisory intelligence — scans balance sheet to detect AR, AP, fixed assets, loans, prepayments and asks targeted questions
 - Gap period handling — strategies for importing transactions between cutoff date and today
 - Subledger-aware opening balances — individual invoices/bills for proper aging

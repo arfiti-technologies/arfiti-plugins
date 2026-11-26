@@ -8,53 +8,22 @@ Use this to determine the right migration path during Phase 0 discovery.
 Q: Is the user starting from scratch (no prior system)?
 ├── Yes → Path C (Greenfield)
 └── No → Q: Which accounting system?
-    ├── Merit Aktiva → Path A (Connector)
-    ├── QuickBooks Online → Path A (Connector)
-    ├── SmartAccounts → Path A (Connector)
-    ├── Multiple systems → Path D (Hybrid)
-    └── Other (Xero, SAP, custom, spreadsheets, etc.) → Path B (CSV/Manual)
+    ├── Any accounting system (Merit Aktiva, QuickBooks Online, SmartAccounts, Xero, SAP, custom, spreadsheets) → Path B (CSV/Manual)
+    └── Several systems or sources → Path D (Hybrid: several exports)
 ```
 
 ## Path Comparison
 
-| Aspect | Path A (Connector) | Path B (CSV/Manual) | Path C (Greenfield) | Path D (Hybrid) |
-|--------|-------------------|--------------------|--------------------|----------------|
-| **Automation** | High — most data synced automatically | Low — user prepares and uploads CSVs | Minimal — interactive creation | Mixed |
-| **User effort** | Review and confirm | Prepare exports, map fields, fix errors | Answer questions, create records | Both |
-| **Data quality** | Good — connector handles mapping | Varies — depends on export quality | N/A | Varies |
-| **Speed** | Fast (hours) | Medium (days) | Fast (minutes) | Medium |
-| **Best for** | Users on supported systems | Users on unsupported systems | New companies | Complex migrations |
+| Aspect | Path B (CSV/Manual) | Path C (Greenfield) | Path D (Hybrid) |
+|--------|--------------------|--------------------|----------------|
+| **Automation** | Low — user prepares and uploads exports | Minimal — interactive creation | Mixed |
+| **User effort** | Prepare exports, map fields, fix errors | Answer questions, create records | Several sources to reconcile |
+| **Data quality** | Varies — depends on export quality | N/A | Varies |
+| **Best for** | Any company moving from another system | New companies | Data spread over several systems |
 
-## Path A — Connector Migration
+## Path A — Connector Migration (not offered)
 
-**Supported connectors:**
-- **Merit Aktiva** — Full sync: accounts, customers, vendors, items, dimensions, fixed assets, transactions, opening balances with open items
-- **QuickBooks Online** — Full sync: accounts, customers, vendors, items, transactions
-- **SmartAccounts** — Full sync: accounts, customers, vendors, transactions
-
-**What the connector handles automatically:**
-1. Chart of accounts mapping and import
-2. Customer and vendor master data
-3. Item/product catalog
-4. Dimension types and values
-5. Trial balance at cutoff date
-6. Open AR invoices (individual records for aging)
-7. Open AP bills (individual records for aging)
-8. Fixed asset register (with depreciation history)
-9. Historical transactions (for gap period)
-
-**What may still need manual setup:**
-- Bank accounts (IBANs, GL account links)
-- Posting profiles (if not covered by connector)
-- Employees and payroll (most connectors don't sync payroll)
-- Custom dimensions not in the source system
-
-**How to use:**
-1. User sets up connector in admin dashboard (credentials entered securely via UI)
-2. Activate: `manage_connectors(action="activate", connector_id=UUID)`
-3. Sync master data: `manage_connectors(action="sync_accounting_data", connector_id=UUID, entity_types=[...])`
-4. Use migration panel for opening balance with preview and cutoff date selection
-5. Sync gap period: `manage_connectors(action="sync_accounting_data", ..., from_date=..., to_date=...)`
+No new connection to another accounting system can be set up at present (an organisation that already has one keeps syncing it from the dashboard's connectors page), so every migration brings its data in from the old system's exports (Path B). Do not offer to set up a sync or a connector for a migration. Bank feeds are a separate, optional connector and are unaffected.
 
 ## Path B — CSV/Manual Migration
 
@@ -97,14 +66,13 @@ get_onboarding(action="get_support", support_type="import_<type>")
 ## Path D — Hybrid
 
 **When to use:**
-- Connector available for financial data but not for payroll/HR
 - Some data in one system, other data in spreadsheets
 - Migrating from multiple systems simultaneously
 
 **Approach:**
-1. Use connector for what it supports (accounts, vendors, customers, transactions)
-2. Manual import for what it doesn't (employees, custom dimensions, etc.)
-3. Opening balance from connector, then manually add any missing items
+1. Import each source's export in the Path B order
+2. Agree with the person which source is authoritative where they overlap
+3. One opening balance for the entity, reconciled to every source
 
 
 ### Bank/card purchase replay controls

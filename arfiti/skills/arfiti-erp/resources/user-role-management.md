@@ -1758,7 +1758,7 @@ grants or notification payload visibility within a company.
 
 ### Onboarding connection indicator
 
-The connector step polls every five seconds while visible and waiting, pauses in
+The assistant step polls every five seconds while visible and waiting, pauses in
 a hidden tab, and stops after a valid first-connection timestamp. Malformed or
 noncanonical timestamps do not mark the company connected; the next scheduled
 poll can recover. Summary steps read once without polling. The timestamp is a

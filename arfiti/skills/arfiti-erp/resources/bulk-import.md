@@ -213,6 +213,37 @@ get_imports(action="status", import_id="uuid")
 
 **Approval gate:** If the org has an `import_batch.review` workflow configured, the import (sync or async) can land in `pending_approval` instead of running immediately — check `status` in the response rather than assuming it always executes right away. A reviewer rejection or request for changes marks that import `rejected`; no business rows are imported. Use `get_imports(action="status", import_id=...)` to read its final status.
 
+### What each row reports, and where to read it
+
+Every row of a CSV file, or record of a submitted array, ends in one outcome:
+
+| Outcome | Meaning | Where it shows |
+|---------|---------|----------------|
+| imported / updated | written; `updated` only with `on_duplicate="update"` | `imported` / `updated` in a synchronous answer, `imported_count` / `updated_count` in the status read |
+| skipped | already there under the duplicate rule (`on_duplicate="skip"`) | `skipped` / `skipped_count`. Re-running a file that is already in reports every row skipped and `imported: 0` with no error: that is the expected result |
+| error | refused, with a reason; nothing of that row is written | `errors` / `error_count`, and an entry in `errors_detail` with `row`, `field`, `error` and `record_identifier` |
+| validated | a check (`validate_only`) passed it; nothing written | the check's counts |
+
+Some outcomes belong to the whole import, not to a row:
+
+- **Waiting for approval.** When the organisation's `import_batch.review` workflow is active the answer says `pending_approval` and no row is written until a reviewer approves. A rejection ends it `rejected`: nothing imported.
+- **Refused before the first row.** Another background import is running (no import record is created), or a transaction file was already imported into the same entity and some of its rows carry no reference number (a deliberate re-import after reversing the first passes `options.allow_reimport: true`).
+
+**A synchronous answer** (50 records or fewer) is final: `status` is `completed` (no errors), `partial` (some written, some refused) or `failed` (nothing written), with the counts and `errors_detail` (up to 100 entries). `success: true` can still mean a partial import; read `errors`.
+
+**An asynchronous import** (more than 50 records, or a CSV file) answers with `import_id`. Read it with `get_imports(action="status", import_id=...)`: `status`, `total_records`, `processed_records`, the four counts, `progress_pct` and `message`. How current the counts are depends on the source:
+
+- **CSV file job:** each row commits together with its outcome and the run's counts, so the counts always match the rows written, even after a worker stops.
+- **Submitted records array:** the counts and row outcomes are written after each batch of records has committed (`batch_size`, default 100). A worker that stops mid-batch can leave the counts behind the rows already written; check the records before resubmitting.
+
+Once the run is `completed` or `failed` the read adds `errors_detail` (the first 20 of up to 100 stored errors), `warnings` (first 20), `started_at` and `completed_at`; a `rejected` import has none of these. Any run that has stopped and records its rows adds `row_counts`: how many rows ended `imported`, `updated`, `skipped`, `error` or `validated`. `row_counts` is not given while the run is going, nor for an import from before row records existed.
+
+**What is not reported through the tools:**
+
+- The rows themselves (each row's values, outcome, errors and the record it wrote). The dashboard's import run page lists them; through the tools there are only the counts, `row_counts` and the first 20 errors. With more errors than that, send the person to the run page, or fix the file and run it again with `on_duplicate="skip"`.
+- An opening-balance CSV keeps no row records: it posts one journal. Read it with `get_imports(action="get_opening_balances", ...)`.
+- `completed` means the worker finished, not that every row went in: read `error_count`. `total_records - processed_records` is the rows not reached when a job stopped, not an error count.
+
 ---
 
 ## Import Options
@@ -301,6 +332,20 @@ The `external_id` is stored in the `metadata` JSONB column. Later, transaction i
 - Setting up opening balances for a new entity starting on Arfiti
 - User provides a balance sheet from the prior year
 
+### Before you import: what to ask and check
+
+Ask these before any write, in this order, and answer the person's question first if they asked one ("can I put it all in on 1 April?" is a question, not an instruction to post). When they say not to change anything, read and explain only.
+
+1. **Which entity, and which old system.** Ask what the old system can export: a trial balance at the cutoff, the open customer invoices and vendor bills behind the receivable and payable balances, and the fixed asset register. Data comes in from those exports through the imports below.
+2. **The fiscal year.** Ask when the company's financial year starts and ends, then read the entity's periods: `query("fiscal_period", filters={"legal_entity_id": ID}, limit=50)`. If the periods in Arfiti do not follow the year the person gives, stop and say so; do not post until it is resolved.
+3. **The cutoff and the opening date.** The last day the old books cover (the trial balance's as-of date) and the first day the books run here. See Step 1.
+4. **Does the trial balance still hold income and expense accounts?** At the last day of a financial year, read [At a fiscal-year boundary](#at-a-fiscal-year-boundary) before proposing a date. In the middle of a year, see the note under Step 2.
+5. **Open items and assets.** Whether they can give the open invoices, bills and asset register (Step 3); they decide which import runs.
+6. **The balancing account.** A trial balance that balances needs none. Any difference beyond rounding is explained before posting, not absorbed. For what remains, the person names the equity account (`balancing_account_number` has no default; you may list the entity's equity accounts to choose from) and you record their choice.
+7. **What already exists.** Opening entries in any period (Step 1; `get_onboarding(action="check_status")` gives the number of posted opening entries and their first and last dates), a chart and posting profiles (`ready_to_post` covers only the chart and one active profile), and an open monthly period containing the opening date: `check_status` reports only the period containing today, so read the opening date's period with `query("fiscal_period", ...)`.
+
+Do not guess any of these. In particular never assume the fiscal year, the cutoff date, the balancing account, how the old year's result was or should be closed, or a tax treatment of the prior year. Where the answer depends on a country's rules (for example how a year-end result is closed or filed), say so and point to that country's pack (`plugins-guide.md`) or the person's accountant; this guide states no country's rule.
+
 ### Step 1: Agree the Opening Date, then Ensure Its Fiscal Period Exists
 
 Two dates are involved; keep them apart:
@@ -315,7 +360,7 @@ The opening entry is dated the **first day of the fiscal period** you name in `f
 - `opening_date` outside the named period, a quarter or year period, or a closed or locked period is refused before anything is written. `opening_balances_with_subledger` takes no `opening_date`; it always posts on the period's first day.
 - **One opening entry per entity and period.** A second upload for a period that already has a posted opening entry, or one still waiting for approval, is refused; the answer's `existing_opening_entry` names it and its own date (`existing_posting_date`). To change the date of a waiting one, have it rejected first; of a posted one, reverse it first.
 - **Check every period first.** The guard is per period: an opening entry already posted in another period of the entity (for example one dated 1 October when the agreed date is 1 November) is not refused. Before importing, look for existing opening entries in all periods (`query("transaction", filters={"legal_entity_id": ID, "transaction_type": "OPENING_ENTRY"})`) and, if one is wrong, reverse it before posting the new one.
-- **At a fiscal-year boundary, a trial balance that still holds income and expense accounts** (not yet closed to retained earnings): first ask for a closed trial balance (balance-sheet accounts only, the year's result already in retained earnings). If the customer cannot provide one, propose dating the opening entry on the **last day of the old year** (`opening_date`), so those lines roll into the prior-year result, state that exact date, and get the customer's agreement before posting. This is the one exception to "balances as at D open on D+1" (Andrew, 24 Nov 2026, AR-1456). It is guidance for the assistant, not a rule the server enforces. Why: dated the new year's first day, those lines would fall inside the new year, whose income statement is then marked incomplete (the report gap "Opening balances or transfers to retained earnings may contain earlier profit"); dated the old year's last day they are prior years' result on the balance sheet. Example: a trial balance as at 31 December 2025 with revenue and expense lines, no closed version available: `fiscal_period_name="2025-12", opening_date="2025-12-31"`, told to the customer as "the opening entry will be dated 31 December 2025, period 2025-12". With only balance-sheet accounts the normal D+1 rule applies. This needs `opening_balances` (or the CSV import): `opening_balances_with_subledger` takes no `opening_date` and refuses one, so with open items ask for the closed trial balance. The old year's last period must be open: a closed or locked period is refused before anything is written; it is reopened through the period operations, or the closed trial balance is used.
+- **At a fiscal-year boundary with a trial balance that still holds income and expense accounts**, the date is chosen differently: see [At a fiscal-year boundary](#at-a-fiscal-year-boundary) below.
 
 Every preview (`validate_only=true`) and every result states `posting_date`, `posting_period` and `posting_date_note`. **Before posting, tell the user the exact date** ("the opening entry will be dated 1 November 2026, period 2026-11") and get their agreement. After posting, read the stored date back (`get_imports(action="get_opening_balances", ...)` returns `posting_date`), not only the totals.
 
@@ -341,9 +386,28 @@ submit(object_type="fiscal_period", operation="create", data=JSON.stringify({
 
 **Do NOT just post to the earliest existing period** — opening balances MUST be in the correct fiscal year.
 
+### At a fiscal-year boundary
+
+When the cutoff is the last day of a financial year and the trial balance still holds income and expense accounts (the year's result is not yet closed to equity, for example to retained earnings), say what each choice does before proposing one. The tool posts whatever date it is given; it does not refuse an unclosed trial balance, and nothing is wrong in the posted amounts. The difference is in how the reports treat the income and expense lines:
+
+| Choice | What the reports do |
+|---|---|
+| **A closed trial balance** (balance-sheet accounts only, the year's result already closed to equity) | Nothing special: the normal rule applies (balances as at D open on D+1). Recommend this first. |
+| **Unclosed, dated the new year's first day** | The opening entry carries income and expense lines into the new year. An income statement whose dates include that day comes back `quality: "incomplete"`, without totals, with the evidence gap `AMBIGUOUS_PERFORMANCE_JOURNAL` ("Opening balances or transfers to retained earnings may contain earlier profit"); the new year's balance sheet leaves the equity total open. No tool marks the entry's year as confirmed, so this stays for every income statement covering that day unless the entry is reversed and posted again on another date. |
+| **Unclosed, dated the old year's last day** (`opening_date`) | The lines belong to the old year. The new year's balance sheet balances and shows them as "Prior years result (not closed)"; the new year's income statement is complete. Income statements whose dates include the old year's last day are withheld the same way, and the balance sheet as at that day (the cutoff itself) has no equity total, so compare the import with the source trial balance through the trial balance report, not the balance sheet. |
+
+How to handle it:
+
+1. Ask for a closed trial balance first, and say why in these terms (which reports are withheld, and from when), not as "the figures will be wrong".
+2. If they cannot provide one, propose the old year's last day: name the exact date and period ("the opening entry will be dated 31 December 2025, period 2025-12") and wait for their agreement. This is the one exception to "balances as at D open on D+1" the assistant proposes on its own (Andrew, 24 Nov 2026, AR-1456); it is guidance, not a rule the server enforces. Example: `fiscal_period_name="2025-12", opening_date="2025-12-31"`.
+3. Check it is possible before proposing it: the old year's last monthly period must exist in Arfiti and be open (a closed or locked period is refused before anything is written; reopening one is the accountant's decision). If it does not exist because the books never ran here in that year, creating a lone month there is the person's or accountant's decision, and how the reports treat such a partial year has not been tested; the closed trial balance avoids the question. The import must be `opening_balances` or the CSV import (there `opening_date` is a default value for the whole file, never a mapped column): `opening_balances_with_subledger` takes no `opening_date` and refuses one, so with open invoices, bills or assets to load, the closed trial balance is the way. If the person still chooses the old-year date, the receivable and payable balances post as amounts with no invoices or bills behind them and the assets are not in the register; say so.
+4. The choice is the person's (or their accountant's). Do not decide for them how the old year's result should be closed, do not post a closing entry to "fix" it on your own, and do not describe a country's year-end rule as general.
+
 ### Step 2: Map the Balance Sheet
 
-Read the user's balance sheet and map each line to a chart of accounts entry. Only include **balance sheet accounts** (assets, liabilities, equity) — NOT revenue or expense accounts (those reset to zero each year).
+Read the user's balance sheet and map each line to a chart of accounts entry. For a closed trial balance, only include **balance sheet accounts** (assets, liabilities, equity) — NOT revenue or expense accounts (those reset to zero each year). A trial balance at a year end that still holds income and expense accounts is the case in [At a fiscal-year boundary](#at-a-fiscal-year-boundary).
+
+**A cutoff in the middle of a financial year, with year-to-date income and expense in the trial balance, is not covered by this guide**: no treatment has been agreed. Do not drop those lines and do not pick a date on your own. Say the case is open, ask the person or their accountant how they want it handled, and tell them what the tools do with each choice: left out, the year-to-date result falls into the balancing equity account and this year's income statement covers only the period after the cutover; included in the opening entry, every income statement whose dates include the opening date is withheld (`AMBIGUOUS_PERFORMANCE_JOURNAL`) and the balance sheet's equity total stays open for the rest of that year.
 
 **Debit/credit rules:**
 - Assets with positive balances → **debit**

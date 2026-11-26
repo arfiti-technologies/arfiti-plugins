@@ -117,6 +117,7 @@ When the user says “start onboarding”, first call `get_onboarding(action="ch
 | Import CSV of transactions, bulk posting | [bulk-transaction-processing.md](resources/bulk-transaction-processing.md) |
 | Bulk import of master data (accounts, customers, vendors) | [bulk-import.md](resources/bulk-import.md) |
 | **Opening balances, initial balance, trial balance migration** | [bulk-import.md](resources/bulk-import.md#opening-balance-import) |
+| **Opening balances at a financial year end; a trial balance that still has income and expenses** | [bulk-import.md](resources/bulk-import.md#at-a-fiscal-year-boundary), after [what to ask and check](resources/bulk-import.md#before-you-import-what-to-ask-and-check) |
 | Expense reports, mileage, per diem | [expense-management.md](resources/expense-management.md) |
 
 ### Sales & Purchase Orders
@@ -212,7 +213,7 @@ When the user says “start onboarding”, first call `get_onboarding(action="ch
 | Set up organization, onboard, initialize, first-time setup | [onboarding.md](procedures/onboarding.md) |
 | Add second entity, add subsidiary (org already onboarded) | [entity-management.md](resources/entity-management.md) |
 | Check onboarding status, onboarding progress | [onboarding.md](procedures/onboarding.md) |
-| Migrate data, switch from another system, opening balances, go-live | [plugins-guide.md](resources/plugins-guide.md) |
+| Migrate data, switch from another system, cutoff date, go-live | [bulk-import.md](resources/bulk-import.md#before-you-import-what-to-ask-and-check) for what to ask and check first; offer the implementation consultant ([plugins-guide.md](resources/plugins-guide.md)) for a guided migration, never as a requirement |
 | Available plugins, install plugins, plugin recommendations | [plugins-guide.md](resources/plugins-guide.md) |
 | Year-end bookkeeping, annual report, VAT declaration, payroll | [plugins-guide.md](resources/plugins-guide.md) |
 
