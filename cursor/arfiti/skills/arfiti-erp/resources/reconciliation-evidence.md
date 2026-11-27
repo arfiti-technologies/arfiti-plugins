@@ -1,0 +1,522 @@
+# Reconciliation evidence and recovery
+
+Companion to [reconciliation operations](reconciliation-management.md).
+Available through `get_guidance("reconciliation-evidence")`; these controls apply
+to supported external callers as well as optional built-in agents.
+
+### Residual write-off contract (bank/card processing, slice 1)
+
+`reconciliation.write_off_item` disposes only of a current residual on an already-applied item in a completed run. `amount_paid` records total settlement, including an approved write-off: an invoice of 100 with 97 applied and 3 disposed becomes paid 100 / due 0. The payment is not applied again. A genuine zero `amount_due` stays zero even without a reconciliation stamp; only NULL uses the legacy face-amount fallback.
+
+The executor locks the run, item and affected transaction headers and validates current remaining value before posting. It currently accepts positive AR/AP invoice residuals in one common document/functional currency. An unapplied proposal, stale balance, credit/overpayment, cross-currency difference, or existing variance/reclass journal requires review; none is silently cleared. For a forgiven receivable the journal credits AR control; for a forgiven payable it debits AP control. Configured gain/loss accounts supply the other side.
+
+The entity's `reconciliation.write_off_limit` is mandatory; unset or exceeded means refusal. No fixed global threshold or adjusting-journal bypass applies. Missing/failed journal creation rolls back completion. Repeated/concurrent requests do not apply another disposal. For the retained legacy cohort, supported unmatch/payment-unapply and run void restore the disposed residual and original invoice application. Dated owned applications instead require explicit-date unmatch first; an owned residual additionally supplies its exact `undo_residual_journal_id` so disposal inverse, original application undo and history commit together. Run void then finalizes the inactive run without another reversal. The disposal is not additional payment cash; current period and retained-evidence date checks apply.
+
+Residual disposal does not establish purchase identity or document adequacy. Apply the reviewed allocation and evidence-task contracts below when a bill involves several captures or purchases.
+
+### Reviewed manual allocations (September 2026)
+
+A bill may have several explicitly reviewed purchase links. A manual allocation
+can select a linked purchase without automatic uniqueness rejecting the other
+linked purchases; vendor/entity, version, source capacity and bill due checks still
+apply. The agent's `bill_purchase_plans` can also apply independent purchases
+without regrouping them when each has a shared typed reference or reviewed bill
+link, every purchase uniquely identifies this bill, all amounts are in the bill
+currency, and the complete set fits the remaining balance. The entire eligible set
+is rechecked under application locks. An equal-sum combination alone remains
+ambiguous. A bill whose own lines itemise several charges (one dated entry per
+charge) is the separate `itemised_bill_lines` rule in the reconciliation guide. For a single-source
+foreign-currency purchase, omitted source_applied_amount can be derived only from
+its recorded original-currency evidence using the existing allocation service.
+Never compare a EUR source amount numerically to a USD invoice amount.
+
+
+### Evidence tasks for third-party settlement
+
+Use the existing evidence agent to read the bill and the card-payment source
+receipt. Equal amounts, merchant names and nearby dates are not relationship
+proof. For a concrete proposed pair, submit `card_purchase.manage` with
+`action: "request_settlement_review"`, `legal_entity_id`, `purchase_id`,
+`expected_version`, `bill_transaction_id`, `relationship_reference`,
+`attachment_ids` and `reason`. Attachments must be stored, hashed and belong to
+the same entity. The resulting task snapshots both documents and the purchase.
+
+The reconciliation owner processes the typed approve/hold/decline response.
+Approval rechecks the evidence and capacity, links only that pair and posts through
+the normal settlement executor. The financial effect and task outcome commit
+together; repeated delivery is a no-op. Changed or missing evidence holds the task.
+The vendor IDs on original documents remain intact. Direct cross-vendor linking
+requires the corresponding `approval_attempt_id`; it is not a global vendor alias.
+
+### Merchant-of-record settlement and multiple captures
+
+The legacy prepaid-hotel agent was migrated to the native evidence-review path by
+migration 608, after the supporting code shipped. It investigates document
+references and creates `request_settlement_review` tasks; it does not create
+synthetic clearing bills/payments or vendor aliases. Only definitions matching the
+legacy algorithm were migrated; do not assume every custom agent was rewritten.
+
+An approved purchase with multiple capture legs settles through the atomic bundle
+executor: each leg consumes its own available amount, and all legs plus the task
+outcome commit together. Hold/decline and stale evidence do not post. Several
+independent purchases retain their identities and require the evidence and
+uniqueness checks above; equal sums alone do not establish identity.
+
+### Run scope and current obligations
+
+Select a named period or explicit period bounds for a period run. The dashboard
+requires an explicit period/all-open selection; legacy callers omitting scope and
+period still scan all open work. Do not interpret an unscoped run as proof that a
+particular month was reconciled. Period bounds apply to payment sources; older
+open invoices can remain settlement targets. Dismissed items stay excluded.
+
+Run counters describe the attempt, not the current outstanding queue. Inspect
+current source/application state and separate statement coverage before close.
+An unpaid invoice alone is not a blocking unmatched reconciliation item.
+
+
+## Purchase evidence investigation (September 2026)
+
+For CARD_EXPENSE-to-bill identity, compare original merchant amount/currency and
+provider purchase-date evidence separately from settlement dates and fees.
+Revolut uses `metadata.purchase_occurred_at`, or the retained routed
+`metadata.original_source.transaction_date`. Do not substitute ingestion time,
+change posted dates, or use nearest-date guessing. Same-day twins remain ambiguous.
+The owner retries deterministic leftovers after applied matches remove competitors.
+
+Purchase investigations (`reconciliation_evidence_v1`, `purchase_investigation_enabled`)
+are removed with the built-in reconciliation pipeline (P-AR-42, November 2026).
+Existing investigation tasks and sagas stay readable as history and no longer take
+an answer; the reconciliation agent (now a managed agent) raises plain review tasks
+instead. Same-vendor settlement reviews may
+cite a fingerprinted connector source plus a stored, hashed bill attachment.
+Cross-vendor reviews still require both sides' documents and explicit approval.
+
+Never treat model confidence, merchant-name similarity or free-text source
+instructions as verified identity. Use the existing settlement workflow after
+an approved review; it rechecks source versions/fingerprint, bill identity,
+attachments and available capacity. Historical run notes retain rejection reasons
+and the investigation saga ID; read current purchase and task state to determine
+what remains open. Preserve the single-badge list status layout.
+
+Reconciliation now uses the sole pipeline host. Original-currency matching precedes
+functional-amount passes; leftover refunds are counted separately instead of becoming
+unmatched payment tasks. Review responses expose typed outcomes: an evidence reply is
+`waiting_dependency`, never proof of settlement. Approval rechecks the human reviewer's
+current permissions, evidence and available capacity. Duplicate callback receipts replay
+without another settlement. Expired investigation claims cannot dispatch more tools;
+interrupted calls retain their spend reservation until an authoritative receipt exists.
+
+
+### Control-account identity for reconciliation adjustments
+
+A linked adjustment must find exactly one AP/AR control account in the target
+invoice's original GL for the selected entity. Missing or mixed control-account
+history requires review; the service does not substitute the first current account
+or a newly changed posting profile. Without a linked invoice, a fallback is permitted
+only when exactly one active control account exists. Multiple controls require an
+explicit source invoice. The source transaction must also belong to the selected
+entity, even when an operator provides a separate repair posting date.
+
+Missing/inactive write-off accounts are refused rather than silently skipping the
+journal. The shared writer validates the final account identity, activity and header
+status before creating the journal. Resolve the source evidence or account mapping
+and retry the supported operation; do not toggle manual-entry flags, invent an
+account number or mark the residual resolved without its journal. These checks do
+not activate AP/AR aging. The narrow residual write-off exception below has a
+database-validated permission; other controlled adjustments do not.
+
+### Explicit receipt/refund offset
+
+Use `reconciliation.match` with `scope="ar"`, `legal_entity_id`,
+`source_transaction_id` (AR_PAYMENT) and `refund_transaction_id` (AR_REFUND).
+Omit `applications`, purchase fields and write-offs. This links an existing refund;
+it neither sends money nor posts another journal. Both documents must be wholly
+unapplied, posted and unreversed, with the same customer, entity, document and
+functional currencies, equal absolute document amounts and exactly opposite
+booked accounts in document, functional and reporting currencies. The refund
+cannot precede the receipt. Preflight and execution check the same evidence;
+execution locks both documents and rechecks consumption.
+
+The dated application consumes both open items from the later document date.
+`reconciliation.unmatch` uses the **receipt** ID and restores both current balances;
+prior reports retain the match until the undo date. Receipt reversal releases the
+refund; unmatch before reversing the refund itself. Partial refunds, FX differences,
+revenue refunds and unrelated payments are not accepted by this exact-offset path.
+They require their appropriate accounting workflow, never guessed netting.
+Invoice connectors exclude refund targets from invoice-application exports.
+Both the operational and the report AR open-item functions account for these
+offsets.
+
+Admin only shows a reconciliation-run link when an application actually belongs
+to a run. Direct receipt/application records can legitimately have no run.
+
+### Residual write-off source authorization
+
+Before posting a residual write-off, the gateway requires both the source and
+invoice to satisfy the shared posted predicate and to have no reversing transaction.
+The customer (AR) or vendor (AP) must be present and identical on both documents.
+A status label alone or a same-entity link is insufficient. Missing posting evidence,
+reversed documents and missing/mismatched parties are refused before creating the
+journal or consuming the residual. Resolve the underlying evidence through the
+supported workflow; do not override the flags or manufacture a party link.
+
+Existing limits, same-functional-currency restriction, recorded residual checks and
+locks still apply. This strengthens the source authorization of `write_off_item`; it
+does not grant a controlled-journal exception, change FX treatment, or activate aging.
+
+### Dated settlement adjustments
+
+A later-dated write-off or FX journal must not change aging before its journal date.
+Application-history events take the later of the source date, invoice date
+and linked variance-journal date. If an application is initially created with a
+later adjustment already attached, capture records an application-only snapshot at
+the document date and the adjusted snapshot at the later journal date. Attaching
+an adjustment to an existing application retains its earlier application snapshot.
+
+Immutable snapshots captured before this rule are not rewritten; audit earlier
+events when reviewing historical reports. The rule grants no controlled-journal
+exception and changes no aging account membership.
+
+### Audited residual write-off permission
+
+For an entity with reviewed ordinary-journal enforcement enabled,
+`reconciliation.write_off_item` can post a same-currency residual against the
+invoice's booked AP/AR control account. The database validates the existing applied
+settlement, completed run in the same entity/scope, posted unreversed payment and
+invoice, matching party, entity currency, configured limit, remaining invoice amount
+and booked control-account basis. The journal must contain the exact two residual
+lines, dated no earlier than either document, with a canonical P&L counterpart.
+Revenue, expense and COGS counterparts are supported with the correct debit/credit
+direction; names do not determine permission. A valid configured gain can credit an
+expense account. This evidenced operation also supports a non-manual P&L account.
+
+Successful validation creates a private, immutable receipt bound to that journal
+and settlement item. Commit requires the invoice to be settled and source ledgers
+to match the captured evidence. Failure rolls back the journal, receipt and
+settlement together. Caller metadata or direct receipt insertion cannot grant
+permission. Changing a permitted journal invalidates its permission; use supported
+reversal/correction workflows rather than editing the receipt.
+
+This exception currently supports `AP_PAYMENT`/`AR_PAYMENT` against the matching
+invoice type. It does not authorize FX, credit-memo/prepayment/refund/card-funded
+write-offs, multi-control allocations or arbitrary control-account corrections.
+Existing journals receive no automatic receipts.
+
+The shared adjustment writer dates both gateway write-offs and agent FX adjustments
+at the later payment/invoice date. Explicit repair dates must also be no earlier
+than either document. A missing target in the selected entity is refused. Closed
+periods are still refused; there is no automatic move into an open period. The shared writer records header `functional_amount` equal to the
+functional GL debit total it books; this does not introduce currency conversion.
+
+### Booked evidence for automatic FX
+
+The reconciliation agent checks the stored settlement and both documents'
+actual GL before creating a full-settlement FX journal. It requires a first,
+full AP/AR payment-to-invoice application, matching party/entity/currencies,
+posted unreversed documents, balanced complete ledger amounts and the same
+active control account on both documents. The account role follows subtype and
+manual-entry policy; account names and `is_reconcilable` do not determine it.
+
+The proposed signed FX amount must exactly equal the combined functional
+control-account balance. A differing matcher amount cannot override that evidence.
+Partial applications, previously consumed payments, other applied settlements,
+multiple/different controls and incomplete evidence do not receive an automatic
+FX journal. The match retains `pending_review`; its application is not silently
+undone by an FX refusal. Review the outstanding variance before considering the
+settlement complete; do not toggle account flags to force a journal.
+
+The application-side check is paired with the database permission for the first
+full settlement described below. Other FX routes are not supported under
+controlled-journal enforcement.
+
+### Audited full-settlement FX permission
+
+With reviewed ordinary-journal enforcement enabled, the database permits the
+first full AP/AR payment-to-invoice FX adjustment when the journal exactly clears
+the combined functional control balance. The payment and invoice must share one
+active control account and party, have complete balanced GL, and use the entity's
+functional currency. Different document currencies are supported; NULL legacy
+header functional currency inherits the entity currency. Explicit disagreement
+is refused. Both source and target application amounts must be evidenced.
+
+The reconciliation run must belong to the same entity and AP/AR scope and be
+running or completed. A grouped run stamped with a different entity does not
+qualify: use an entity-specific run. The counterpart
+must be a canonical active nonheader P&L account. A configured expense credit
+for a gain is permitted; neither account names nor caller metadata grant access.
+
+The database creates an immutable private `controlled_fx_permissions` receipt
+bound to the journal, settlement item and booked document evidence. At commit it
+rechecks the evidence and requires full source consumption and invoice settlement.
+Failure rolls back the journal, receipt and settlement together. A competing
+attempt cannot attach a second journal. A running run is allowed because the
+agent finalizes runs after individual settlement transactions commit.
+
+Partial allocations, previously applied documents, different/multiple controls,
+card-funded settlements, prepayments, credit memos and historical receipt backfills
+are outside this permission. Existing journals are not grandfathered.
+
+
+### Investigation request saga authority
+
+The purchase investigation saga is removed; these checks govern reading the
+requests and sagas it left. A stored `reconciliation_agent` request with action `investigate_purchase` must
+reference a saga in the same organization and entity, with type
+`reconciliation_evidence_v1` and the same checkpoint purchase ID. Current AP and
+purchase-owner read rules still apply. Missing, malformed, foreign or differently
+bound saga references withhold the request/thread before rows, totals and pages.
+
+The shared graph checks supported saga checkpoints, phase metadata, linked
+instances and retained references. A readable request cannot make a forbidden
+descendant readable. Readable completed history and self/mutual/mixed cycles
+remain supported; the active-status check used when retrying an investigation
+is not a condition for reading its history. Settlement-review requests retain
+their separate producer contract and do not acquire a required saga ID.
+
+These checks neither resume a saga nor approve settlement. Do not change stored
+references to bypass a read refusal.
+
+
+## Close evidence for AP/AR subledgers
+
+A close memo names subledger exceptions, control differences and currencies; a balanced trial balance cannot certify an uncertified AP/AR aging report. Reversal evidence retains source document identities. Historical payment applications are not repaired by the close memo.
+
+## Owned bundles
+
+Owned-bundle matches and native runs are removed; none were ever recorded. `reconciliation.match` refuses `owned_bundle_proposal`,
+`owned_bundle` and `native_continuation_recovery` by name and writes nothing: use
+the ordinary match with `source_transaction_id`, `applications` and an explicit
+`application_effective_date`. `get(reconciliation_run)` no longer returns
+`native_continuation`. The bundle tables and guards stay: a source under an active
+bundle claim is refused by every application writer, `void_run` refuses a run with
+an unresolved bundle, and reverse-charge repair refuses a bill inside a claim.
+Run totals honour `summary.owned_bundle_outcome_v1` availability flags where a
+summary carries them; unavailable totals display "Unavailable", never zero.
+
+
+### Owned card purchase undo
+
+The supported `reconciliation.unmatch`
+workflow accepts `undo_bundle_receipt_id`, `source_transaction_id`,
+`reconciliation_run_id`, `legal_entity_id`, an explicit `undo_effective_date`, and
+`reason`. Obtain the original receipt from scoped `get(reconciliation_run)`:
+`owned_bundle_receipts[].receipt_id`. Preparation is not financial approval;
+current configured workflow permission, original API key/entity scope and approval
+remain required at execution. No built-in saga is required.
+
+The initial capability covers an unchanged owned card purchase revision, exact
+original receipt/run members, one recorded source/target currency, and their
+CARD_EXPENSE_RECLASS journals. Selecting one leg selects the entire original
+bundle. Other runs' allocations and consumption remain intact. Arbitrary historical
+card applications, changed membership, mixed currencies and ambiguous existing
+reversals are outside this capability and refuse without partial effects.
+
+The caller chooses the date; it cannot precede affected original/history evidence,
+be future-dated or fall in a closed/locked period. Exact inverse journals, inactive
+history on that date, source/invoice capacity and an immutable undo receipt commit
+atomically in the approved workflow transaction. A later-leg failure rolls back
+all undo work even when an outer caller catches it. Original bundle evidence is
+retained. Identical receipt/date/reason/actor replay returns the saved result;
+changed input conflicts and never sweeps later applications into an old undo.
+
+Concurrent effective-policy editing may
+cause a nonwaiting refusal; retry after that edit settles, with current authority
+rechecked. This protocol does not widen simple-cash/native allocation receipts or
+invent an accounting date policy.
+
+
+### Card match undo without a bundle receipt (AR-1274, migration 905)
+
+Card matches written by `reconciliation.match` (the July 2026 matches and the
+managed-agent matches since 16 Nov 2026) carry no bundle receipt. They are
+undone through the same `reconciliation.unmatch` workflow with
+`source_transaction_id`, `legal_entity_id`, an explicit `undo_effective_date`
+(YYYY-MM-DD), a `reason`, and optionally `reconciliation_run_id`; leave
+`undo_bundle_receipt_id` out. A match that a bundle applied still refuses here
+and names `undo_bundle_receipt_id`.
+
+Two shapes are reversed; anything else refuses without effects and needs a
+reviewed recovery:
+
+- card charge to bill with its CARD_EXPENSE_RECLASS journal: the journal is
+  reversed on the undo date, the bill gets back `applied_amount` (`amount_paid`
+  down, `amount_due` up) and the charge gets back `source_applied_amount`. A
+  match that recorded no card-side amount uses `applied_amount`, only when the
+  charge and the bill share one currency;
+- card charge to card charge refund offset: both charges are freed, nothing
+  is posted.
+
+A charge in a card purchase takes its purchase peers with it, as the undated
+path did. The date cannot be in the future, before the documents, the
+reclassification or the saved application history, and must fall in one open,
+unlocked period. The reversal, the restored amounts, the voided items, the
+dated history and an immutable `unbundled` row in `card_purchase_undo_receipts`
+commit together; the database validator checks the row at insert and again at
+COMMIT. A second request finds nothing applied and changes nothing. Written-off
+variances, FX journals, native allocation receipts and matches across purchases
+refuse.
+
+**Which application history bounds the date (AR-1352, migration 908).** Only
+history that carries application state: an applied row, or an unapplied row
+recorded after its item was applied (an unapply), on the charge or the bill.
+The `unmatched` rows a reconciliation run keeps and `manual_review` proposals
+(including a proposal's row from before it was confirmed) do not count; before
+908 they did, so the earliest allowed date was the day a run last touched the
+documents. An undo can now carry the date of the settlement it reverses when
+that period is open. An unapply already recorded on the same charge or bill
+(an earlier undo) is a real change and still bounds the date, so a charge
+undone before keeps that undo's date as its floor. The refusal names the bound
+date: "date it on or after YYYY-MM-DD". The same bound applies to a bundle
+undo (`undo_bundle_receipt_id`).
+
+The unbundled undo's result carries `settlement_effective_date` (when the
+reversed applications took effect) and, when the undo falls in another fiscal
+period, a `warning`: settling the charge again is dated by its documents, so
+it lands in the settlement's period, not the undo's. The bundle undo's result
+has neither field. To correct a paid card bill inside one month (undo, edit,
+settle again), date the undo on `settlement_effective_date`, or on the date a
+refusal names when an earlier change on the documents is later. There is no
+default date; `undo_effective_date` stays required.
+
+### Re-dating a card undo that was recorded on the wrong date (AR-1388, migration 916)
+
+An undo already recorded keeps its date in three immutable places: the reversal
+of the CARD_EXPENSE_RECLASS journal, the `card_purchase_undo_receipts` row and
+the unapply row in the application history. When that date is later than it
+should be (before AR-1352 the bound could force an undo past the settlement's
+month), the settlement sits in one period and its undo in the next, in the
+ledger and in the as-of open items. Do not reverse the undo's reversal by hand
+with `transaction.reverse`: the journal stays marked reversed by the first
+reversal and cannot be reversed again on another date.
+
+Move the undo with the same `reconciliation.unmatch` workflow:
+`scope: "ap"`, `legal_entity_id`, `source_transaction_id` (the card charge),
+`redate_card_undo_receipt_id` (the `card_purchase_undo_receipt_id` the original
+unmatch returned), `undo_effective_date` (the new, earlier date) and a `reason`.
+Leave `reconciliation_run_id` and `undo_bundle_receipt_id` out. Nothing is
+unapplied; the bill and the charge keep the amounts the undo restored.
+
+What it writes, in one transaction:
+
+- ledger: the reversal that carries the undo is reversed on its own date, and
+  that reversal is reversed on the new date. Each step is an ordinary reversal
+  pair, so the journal and the undo now cancel on the new date and the old date
+  nets to zero. No reversal link is cleared; the `reversal_pairs` close check
+  is unaffected;
+- application history: one unapply row per application on the new date. As-of
+  reports read the application as undone from that date on. The earlier row
+  stays;
+- evidence: an immutable row in `card_undo_redate_receipts` bound to the
+  original undo receipt, checked by the database at insert and at COMMIT. The
+  original receipt is not changed and still shows the first date.
+
+Refused without effects, each naming its reason:
+
+- a date that is not earlier than the undo's current date (moving an undo
+  later is a different correction and needs a reviewed recovery);
+- a date before the charge or the bill, or before the settlement took effect;
+- another application change on the charge or the bill after the new date and
+  before the undo. A change recorded on the undo's own date after the undo
+  keeps its order and does not refuse. The refusal names the date to use
+  instead;
+- no open, unlocked fiscal period on the new date or on the undo's current
+  date (both get a posting), or a closed or locked period anywhere between
+  them (its as-of balances would change): reopen it first;
+- an undo owned by a bundle receipt (`kind = 'bundle'`): reviewed recovery;
+- the undo's reversal was reversed once, so the settlement journal is live in
+  the ledger again: reverse that reversal first, then re-date. A reversal that
+  was reversed and reversed again on the undo's date is handled; the re-date
+  starts from the last reversal.
+
+The same request again returns the same `card_undo_redate_receipt_id` with
+`replayed: true`. A re-dated undo can be re-dated again, earlier still. The
+result lists, per application, the journal, the reversal that was live, its
+annulment and the new inverse. There is no default date.
+
+Two things to know before relying on it:
+
+- the new inverse is a reversal dated earlier than the entry it reverses (the
+  annulment on the old date). The ledger guards, the `reversal_pairs` close
+  check and the as-of reports accept that; the manual-journal reversal rule
+  (a reversal on or after its original) is not applied to these entries;
+- the first unapply row stays in the history on the old date and still bounds
+  later changes: a new application or undo on the same charge or bill cannot be
+  dated before the old undo date. Re-dating corrects the periods the undo is
+  reported in; it does not reopen the dates in between for new settlements.
+
+### Owned residual writeoff and dated undo
+
+The owned residual protocol covers same-currency, dated cash applications to
+AP/AR invoices with retained original application evidence. It uses the audited
+residual write-off permission above and the current configured workflow
+permission/approval controls. No built-in agent or saga is required.
+
+Submit `reconciliation.write_off_item` with an explicit
+`write_off_effective_date` and the existing item/reason inputs. The date must
+satisfy retained application/history and current period checks; the service does
+not choose it. Current configured account/limit policy remains authoritative.
+Pending approval creates no disposal. Execution rechecks the original submitter's
+current key, entity scope and permissions, including after delayed approval.
+
+The original application receipt and cash consumption remain unchanged. The
+residual write-off permission receipt records the disposal journal and its dated approved input;
+target settlement increases only by that retained disposal. Use the returned
+`write_off_journal_entry_id` as `undo_residual_journal_id` in the existing
+`reconciliation.unmatch` operation, with exact source/run/entity, AP/AR scope,
+reason and explicit `undo_effective_date`. Combined undo reverses that journal
+once, releases the original cash application, restores invoice capacity and writes
+dated inactive history atomically. A late failure rolls back the entire undo.
+Original application, bundle and disposal evidence remains retained.
+
+Exact retries return the recorded operation result without another journal or
+inverse. A historical receipt does not assert that an application remains active
+after a legitimate undo. Run totals represent the latest recorded run observation;
+independent writeoff/undo does not promise automatic refresh of saved run totals.
+Do not retry an unavailable owned operation through an undated legacy call.
+
+This capability does not extend to FX residuals, arbitrary historical applications
+or the separately scoped card-purchase undo protocol. Legacy cohorts retain their
+existing contracts. The existing `void_run` finalizes only after active dated applications have
+been undone explicitly; see the cancellation/finalization contract below.
+
+
+### Cancelling a partial run and finalizing void
+
+`agent_instance.cancel` stops cancellable orchestration; it does not reverse
+committed accounting. Cancellation is never a no-effect certificate.
+
+For a completed partial reconciliation run, `reconciliation.void_run` refuses
+while dated applications remain active. First use the supported explicitly dated
+`reconciliation.unmatch` for each intended application: plain cash, exact card
+bundle receipt, or residual journal identity as appropriate. Each operation uses
+its own configured approval, current authority and retained date/evidence checks.
+Void does not infer an undo date or perform a new bulk financial protocol.
+
+After supported undo, the existing void operation can finalize the run. It checks
+the run's current entity access even with zero active items and refuses unresolved
+owned attempts or source claims. Public void retains the exact
+original key/entity scope and approved payload in immutable submission evidence;
+it rechecks current authority in the same approved transaction, including after
+an approval wait. Broadening the key later does not broaden the original scope.
+Malformed retained authority refuses rather than becoming unrestricted. It preserves failed/manual-review members and all
+original receipts/history; it does not dismiss those records. Public same-key
+replay returns the prior result without another financial effect.
+
+Current shared retained 1.0/1.1 writers fence terminal voided runs:
+financial applications, review/card records and summary writes cannot reopen the
+run. Contention refuses without waiting on an inverted run lock; retry after the
+other owner finishes, using current evidence. Completed nonvoided runs retain
+supported reconsideration behavior.
+
+
+### Dashboard void submission result
+
+The bank and card run pages distinguish a submitted or pending void workflow from confirmed finalization. They show “Run voided” only when the gateway returns successful executor evidence for the requested run and an explicit item count. Approval alone, unknown recovery status, or missing completion evidence stays unconfirmed; no absent count becomes zero. The workflow reference and status remain in the router response. This changes notification wording, not approval policy or financial undo: dated owned applications still require their explicit authorized undo before run finalization.
+
+
+### Void approval retains original authority
+
+`reconciliation.void_run` retains the authenticated originating key, entity scope and exact saved approval payload in private immutable submission evidence. Delayed approval rechecks that original key's current validity and scope, current caller permissions and configured entity policy before effects.
+
+The exact submission identity/retention prerequisite applies when void reads that evidence. A missing primary key, conditional or disabled retention trigger, altered retention function, or nonprivate grants makes that capability unavailable; it does not widen authority.

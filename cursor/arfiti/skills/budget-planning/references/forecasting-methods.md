@@ -1,0 +1,200 @@
+# Forecasting Methods Reference
+
+Use these methods when creating a mid-year forecast (Mode 3). The goal is to blend YTD actuals with projected amounts for remaining months to produce a full-year outlook.
+
+## Setup
+
+Before applying any method, gather:
+- **Actuals cutoff and basis**: the user's choice, asked before any figures are read (SKILL.md, Mode 3 Step 2): either closed periods only, or everything posted up to a cutoff date with open months marked provisional. Neither needs a period close to have run.
+- **YTD Actuals**: actual movements for each month inside that cutoff, in the entity's functional currency. Read them per month (`query("transaction_line", ..., date_filters={"transaction_date": {...}}, group_by=["account_number"], aggregates={"debit": "sum", "credit": "sum"})`, one call per month, paging until complete) or as one period with `generate_report("trial_balance", {"legal_entity_id": ..., "start_date": ..., "end_date": ...})`. Check the dates the report says it used and stop at the chosen cutoff. On the posted-to-date basis, label open months provisional. Keep each month's sign: a reversal month can be negative.
+- **Fiscal months**: count months from the entity's fiscal year start (`query("fiscal_period", ...)`), not from January.
+- **Original Budget**: the line amounts of the approved or locked version being revised, for every period
+- **Prior Year Actuals**: Same period last year (optional, for seasonal methods)
+- **Cutoff**: the dividing line between actuals and projections (the cutoff above)
+
+## 1. Run Rate
+
+Extrapolate from YTD performance assuming the current pace continues.
+
+**Formula**: `forecast_remaining = (ytd_actual / months_elapsed) x months_remaining`
+
+**Example** (through June, forecasting Jul-Dec):
+```
+YTD Revenue (Jan-Jun): 285,000
+Monthly run rate: 285,000 / 6 = 47,500
+Forecast (Jul-Dec): 47,500 x 6 = 285,000
+Full-year forecast: 285,000 + 285,000 = 570,000
+Original budget: 540,000
+Variance: +30,000 (5.6% favorable)
+```
+
+**Best for**: Stable businesses with even monthly patterns.
+**Weakness**: Ignores seasonality — will over/underestimate if H2 is naturally different from H1.
+
+---
+
+## 2. Linear Trend
+
+Fit a line to the YTD monthly data points and extrapolate forward.
+
+**Formula**: Use least-squares regression on monthly actuals to find slope and intercept, then project.
+
+**Example**:
+```
+Month:   Jan    Feb    Mar    Apr    May    Jun
+Actual:  42K    44K    45K    47K    48K    49K
+
+Least squares: slope = 1,400, intercept = 40,933.33
+Trend line: y = 40,933.33 + 1,400 x month_number
+July forecast: 40,933.33 + 1,400 x 7 = 50,733.33
+August forecast: 40,933.33 + 1,400 x 8 = 52,133.33
+... and so on
+```
+
+**Best for**: Growing or declining businesses with a clear trend.
+**Weakness**: Assumes linear growth continues — can be unrealistic for long projections.
+
+---
+
+## 3. Seasonal Adjusted
+
+Apply the prior year's seasonal pattern to the current year's run rate.
+
+**Formula**:
+1. Calculate prior year monthly weights: `weight[m] = prior_year_month[m] / prior_year_total`
+2. Calculate current annual run rate: `run_rate = ytd_actual / sum(weights for elapsed months)`
+3. Project remaining months: `forecast[m] = run_rate x weight[m]`
+
+**Example** (using prior year seasonal pattern):
+```
+Prior year (2025), weight = month / 600K:
+  Jan: 40K (6.67%), Feb: 38K (6.33%), Mar: 42K (7.00%), Apr: 45K (7.50%), May: 48K (8.00%), Jun: 50K (8.33%)
+  Jul: 52K (8.67%), Aug: 50K (8.33%), Sep: 55K (9.17%), Oct: 58K (9.67%), Nov: 60K (10.00%), Dec: 62K (10.33%)
+  Total: 600K (weights add up to 100%)
+
+2026 YTD actual (Jan-Jun): 285K
+2025 H1 weight: 263K / 600K = 43.83%
+Implied annual run rate: 285K / 0.43833 = 650.19K
+
+July forecast: 650.19K x 52/600 = 56.35K
+August forecast: 650.19K x 50/600 = 54.18K
+... apply each month's weight; Jul-Dec together = 365.19K, full year 650.19K
+```
+
+Calculate weights from the amounts at full precision and round only the final amounts; never type rounded percentages back into the calculation (rounded weights here would add up to 105%).
+
+**Best for**: Seasonal businesses (retail, tourism, agriculture, B2B with fiscal year-end spikes).
+**Weakness**: Assumes the seasonal pattern is stable year-over-year.
+
+---
+
+## 4. Three-Month Moving Average
+
+Use the average of the last 3 months of actuals (inside the cutoff) as the forecast for each remaining month.
+
+**Formula**: `forecast[m] = (actual[m-1] + actual[m-2] + actual[m-3]) / 3`
+
+As each month completes, the window slides forward (but for forecasting all at once, use the most recent 3 months for all remaining months).
+
+**Example** (through June):
+```
+April actual: 47K, May actual: 48K, June actual: 49K
+Moving average: (47 + 48 + 49) / 3 = 48K
+
+Jul-Dec forecast: 48K each = 288K
+Full year: 285K (YTD) + 288K = 573K
+```
+
+**Best for**: Smoothing out volatile months. Good default when no strong trend or seasonality.
+**Weakness**: Assumes recent performance is representative of the future.
+
+---
+
+## 5. Budget-to-Actual Blending
+
+Adjust the remaining budget months by the YTD variance trend.
+
+**Formula**:
+1. Calculate YTD variance %: `(ytd_actual - ytd_budget) / ytd_budget`
+2. Apply adjustment to remaining budget months: `forecast[m] = budget[m] x (1 + variance_trend)`
+
+**Example**:
+```
+YTD budget: 270K, YTD actual: 285K
+Variance: 15K / 270K = +5.556% (shown rounded as 5.6%)
+
+Remaining budget months (Jul-Dec): 270K total
+Adjusted forecast: 270K x (285 / 270) = 285,000
+Full-year forecast: 285K + 285K = 570K
+```
+
+**Variants**:
+- **Uniform adjustment**: Apply same % to all remaining months
+- **Converging**: Gradually reduce the adjustment (assume performance normalizes)
+- **Per-account**: Calculate variance % per account and apply individually
+
+**Best for**: When the budget was reasonably accurate but actual performance is slightly above/below.
+**Weakness**: Assumes the variance trend continues unchanged.
+
+---
+
+## Edge Cases (every method)
+
+- **Precision**: calculate at full precision, round each month to the currency's minor unit at the end, and put any rounding difference in the last month so the months add up to the total you showed.
+- **Too little history**: fewer than 3 months of actuals for a trend or moving average, or no prior-year data for seasonal weights: say so and offer Run Rate or a manual override instead of guessing.
+- **Zero or negative bases**: a weight or variance with a zero or negative denominator (no prior-year amount, a reversal month) is undefined; leave that account to the user rather than dividing.
+- **Sign**: work in the report's convention (positive amounts for revenue and expenses, see variance-interpretation.md), not the GL's debit/credit sign.
+
+---
+
+## 6. What-If Scenarios
+
+Create multiple forecast versions to model different outcomes.
+
+**Scenarios**:
+- **Base case**: Most likely outcome (use any method above)
+- **Optimistic**: Best case (e.g., +10% on base)
+- **Pessimistic**: Worst case (e.g., -15% on base)
+
+**Implementation**:
+```python
+# Create base forecast
+submit(object_type="budget_version", operation="create", data=json.dumps({..., "scenario": "forecast", "version_name": "FY2026 Forecast - Base"}))
+
+# Create stretch (optimistic)
+submit(object_type="budget_version", operation="create", data=json.dumps({..., "scenario": "stretch", "version_name": "FY2026 Forecast - Optimistic"}))
+```
+
+Use `scenario` field to distinguish:
+- `budget` = original annual budget
+- `forecast` = revised projection (base case)
+- `stretch` = aspirational / optimistic target
+
+---
+
+## Choosing a Method
+
+| Situation | Recommended Method |
+|-----------|-------------------|
+| Stable business, even months | Run Rate |
+| Clear growth/decline trend | Linear Trend |
+| Strong seasonal pattern | Seasonal Adjusted |
+| Volatile month-to-month | Moving Average |
+| Budget was close to actuals | Budget-to-Actual Blending |
+| Multiple possible outcomes | What-If Scenarios |
+
+**Default recommendation**: Start with Run Rate for simplicity. If the user mentions seasonality, switch to Seasonal Adjusted. If they want to compare scenarios, use What-If.
+
+---
+
+## Presentation Format
+
+Always show the forecast in a clear table with:
+- (A) markers for actual months
+- (F) markers for forecast months
+- Original budget comparison
+- Variance column
+
+```
+| Account | Jan (A) | Feb (A) | ... | Jun (A) | Jul (F) | ... | Dec (F) | FY Total | vs Budget |
+```

@@ -1,0 +1,23 @@
+{
+  "name": "arfiti",
+  "version": "1.0.26",
+  "description": "Finance system for agents and teams: ledger, invoices, bills, payroll, reports and approvals.",
+  "author": {
+    "name": "Arfiti",
+    "email": "support@arfiti.com"
+  },
+  "homepage": "https://arfiti.com",
+  "repository": "https://github.com/arfiti-technologies/arfiti-plugins",
+  "license": "MIT",
+  "keywords": [
+    "accounting",
+    "erp",
+    "finance",
+    "general-ledger",
+    "invoices",
+    "bills",
+    "payroll",
+    "financial-reports"
+  ],
+  "logo": "assets/icon.png"
+}

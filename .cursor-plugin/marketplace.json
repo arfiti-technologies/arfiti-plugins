@@ -1,0 +1,17 @@
+{
+  "name": "arfiti-plugins",
+  "owner": {
+    "name": "Arfiti",
+    "email": "support@arfiti.com"
+  },
+  "metadata": {
+    "description": "Arfiti Finance system for agents and teams"
+  },
+  "plugins": [
+    {
+      "name": "arfiti",
+      "source": "cursor/arfiti",
+      "description": "Finance system for agents and teams: ledger, invoices, bills, payroll, reports and approvals."
+    }
+  ]
+}

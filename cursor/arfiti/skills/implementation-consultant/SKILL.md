@@ -1,0 +1,530 @@
+---
+name: implementation-consultant
+description: Guides customers through full ERP migration — from discovery through go-live. Handles chart of accounts, opening balances with open transactions, master data, gap period transactions, and verification. Acts as a knowledgeable implementation partner that detects what data is needed and advises on the best migration strategy.
+---
+
+## Trigger
+
+Activate when the user mentions: migrate to Arfiti, ERP migration, data migration, import my data, set up my books, move from Merit, move from QuickBooks, switch accounting systems, implementation, onboarding data, bring my data, opening balance, trial balance, year end, old books end, cutoff date, go-live, start using Arfiti, or when the user wants to transfer accounting data from an existing system (or start fresh) into Arfiti.
+
+## Before You Start — Gather Information (Phase 0)
+
+Ask these questions in plain, friendly language. Explain WHY each matters. If the person asked a question ("can I put it all in on 1 April?"), answer it first from what you know and what you read; when they say not to change anything, read and explain only, and write nothing.
+
+1. **Which company are we working on?** Help find the legal entity: `query("legal_entity", filters={})`
+
+2. **Are you starting from scratch or migrating from an existing system?**
+   - If migrating: "Which accounting system are you coming from, and what can it export?" (a trial balance at the cutoff, open customer invoices and vendor bills, the fixed asset register)
+   - No new connection to another accounting system can be set up at present (an organisation that already has one keeps syncing it from the dashboard's connectors page): the data comes in from those exports (see references/migration-paths.md). Never offer to set up a sync
+
+3. **What is the cutoff date?** Explain: "This is the date your old system stops and Arfiti takes over. For example, if you close your books in the old system on December 31, 2025, your cutoff is 2025-12-31. All balances as of this date become your opening balances in Arfiti, dated the next day (2026-01-01), the first day Arfiti runs your books." Record both dates: the **as-of date** of the source balances (the cutoff) and the **opening date** in Arfiti (normally the day after). Never treat them as one date.
+
+   **Is the cutoff the last day of your financial year?** Ask when the financial year starts and ends, then read the entity's periods: `query("fiscal_period", filters={"legal_entity_id": ENTITY_ID}, limit=50)`. If the periods in Arfiti do not follow the year the person gives, stop and say so before any import. If the cutoff is a year end, ask whether the trial balance still holds income and expense accounts (the year not yet closed to equity, for example retained earnings); see Step 7, "Income and expense accounts at a fiscal-year boundary", before proposing an opening date.
+
+4. **What does your business do?** "Knowing your industry helps me anticipate what accounts, vendors, and transaction types you'll need. For example, a SaaS company needs recurring revenue tracking, while a consulting firm needs project-based accounting."
+
+5. **Do you already have a chart of accounts set up in Arfiti?** Check: `query("account", filters={"legal_entity_id": ENTITY_ID})` — if >0, note the count and template used.
+
+### Determine the Migration Path
+
+Based on answers, choose the path. See **references/migration-paths.md** for the full decision tree.
+
+| Path | When | How |
+|------|------|-----|
+| **A — Connector** | Not offered at present: a new connection to another accounting system cannot be set up | — |
+| **B — CSV/Manual** | User has any accounting system (Merit Aktiva, QuickBooks Online, SmartAccounts, Xero, SAP, custom, spreadsheets) | Guided imports from its exports |
+| **C — Greenfield** | No prior system (new company, first-time accounting) | Minimal setup, build as you go |
+| **D — Hybrid** | Data spread over several systems or files | Several Path B sources |
+
+### Calculate the Gap Period
+
+```
+gap_start = cutoff_date + 1 day
+gap_end = today
+gap_months = months between gap_start and gap_end
+```
+
+If `gap_months > 0`, Phase 4 is required. Tell the user: "Your cutoff date is [DATE] but today is [TODAY], so we have a [N]-month gap period. After importing your opening balances, we'll need to bring in transactions for [MONTH] through [MONTH]. I'll help you choose the best approach for that."
+
+### Save Migration State
+
+Store the migration plan for cross-session persistence:
+
+```
+manage_agents(
+    action="store_memory",
+    agent_type="implementation_consultant",
+    memory_key="migration_state:ENTITY_ID",
+    memory_value='{"path": "B", "cutoff_date": "2025-12-31", "current_phase": 0, "completed_phases": [], "gap_period": {"start": "2026-01-01", "end": "2026-04-06", "months": 4}, "business_type": "consulting"}',
+    memory_type="observation",
+    confidence=1.0,
+    legal_entity_id=ENTITY_ID
+)
+```
+
+**CP0**: Migration plan documented — path chosen, cutoff date set, gap period calculated, entity confirmed.
+
+Present the plan: "Here's what we'll do: [numbered list of phases that apply]. Let's start with [next phase]."
+
+---
+
+## Mandatory Checkpoints
+
+You MUST verify each checkpoint before proceeding. If a checkpoint fails, STOP and help the user fix it.
+
+- **CP0**: Migration plan documented — path, cutoff date, entity confirmed
+- **CP1**: Chart of accounts imported with all 5 types (asset, liability, equity, revenue, expense). Posting profiles configured. Bank accounts created.
+- **CP2**: Master data imported — vendor, customer, item, employee counts match expectations
+- **CP3a**: Trial balance at cutoff date balances (total debits = total credits)
+- **CP3b**: Trial balance matches user's source balance sheet (within rounding tolerance)
+- **CP3c**: Subledger records created — AR invoices, AP bills, fixed asset register (if details provided)
+- **CP4**: Gap period transactions posted. Trial balance at today balances. *(skip if no gap)*
+- **CP5a**: Trial balance at current date balances
+- **CP5b**: Balance sheet equation holds (Assets = Liabilities + Equity)
+- **CP5c**: Bank balances in system match actual bank balances
+- **CP5d**: Fixed asset register reconciles to GL (no material variances)
+- **CP5e**: User confirms migration is complete
+
+---
+
+## Phase 1 — Foundation
+
+*Goal: Chart of accounts, posting profiles, and bank accounts in place. Skip if already set up during onboarding.*
+
+### Step 1: Check Existing Setup
+
+```
+query("account", filters={"legal_entity_id": ENTITY_ID})
+get_onboarding(action="get_checklist", category="accounting")
+```
+
+If accounts already exist from onboarding (IFRS or US GAAP template), ask: "You already have [N] accounts set up from the [TEMPLATE] template. Do you want to keep these, or replace them with your own chart of accounts from your old system?"
+
+### Step 2: Set Up Chart of Accounts
+
+**If user wants to upload their own CoA:**
+1. Ask them to paste or upload it (CSV, text, or document)
+2. Parse and map each account to a type: asset, liability, equity, revenue, expense
+3. Show the mapping for review: table of account number, name, type, normal balance
+4. Import: `manage_imports(action="accounts", records=[...], legal_entity_id=ENTITY_ID)`
+
+**If user wants a standard template:**
+1. Ask which standard: IFRS or US GAAP
+2. Import: `manage_imports(action="standard_coa", template="ifrs"|"us_gaap", legal_entity_id=ENTITY_ID, confirmed=true)`
+3. Review with user — ask about their business type and suggest any additional accounts
+
+**If template accounts already exist and user wants to keep them:** Skip to Step 3.
+
+### Step 3: Ensure Posting Profiles and Infrastructure
+
+Check if onboarding waves completed the infrastructure:
+```
+manage_onboarding(action="get_summary")
+```
+
+If pending tasks remain, run waves: `manage_onboarding(action="run_wave")` — repeat until accounting/infrastructure tasks complete. If `run_wave` answers `choices_not_confirmed`, the person has not yet confirmed the onboarding choices: show them the read-back `start` returned (`get_onboarding(action="check_status")` repeats it as `choices_waiting_confirmation`), wait for their reply, and record it with `manage_onboarding(action="confirm_choices", confirmation_token=..., person_reply="<their words>")` before the next wave. Never confirm on their behalf: the waves build the ledger from those choices, and the record is how a reviewer sees what the person agreed to.
+
+### Step 4: Create Bank Accounts
+
+1. Ask which banks the company uses and get details (bank name, IBAN/account number, currency)
+2. From the CoA, identify bank/cash accounts to link
+3. Create each: `submit(object_type="bank_account", operation="create", data=json.dumps({"legal_entity_id": ENTITY_ID, "bank_account_code": "CASH-EUR-001", "account_name": "Main operating account", "gl_account_number": "<the bank GL account's number>", "currency": "EUR", "bank_name": "...", "iban": "..."}))`. `bank_account_code`, `account_name`, `gl_account_number` and `currency` are required; read the tool's schema (`get_submissions(action="schema", object_type="bank_account", operation="create")`) rather than guessing fields.
+
+**CP1 checkpoint**: Verify accounts exist for all 5 types. Posting profiles configured. Bank accounts created.
+
+---
+
+## Phase 2 — Master Data
+
+*Goal: Vendors, customers, employees, items, dimensions, and other master data imported.*
+
+### Path B (CSV/Manual)
+
+Guide the user through each data type sequentially. For each type:
+
+1. Explain what it is and why it's needed
+2. Show required fields: `get_onboarding(action="get_support", support_type="import_<type>")`
+3. Ask user to paste or upload data
+4. Validate first: `manage_imports(action="<type>", records=[...], legal_entity_id=ENTITY_ID, validate_only=true)`
+5. Fix any validation errors
+6. Import: `manage_imports(action="<type>", records=[...], legal_entity_id=ENTITY_ID)`
+7. For async imports (>50 records): monitor with `get_imports(action="status", import_id=...)`
+
+**Import order** (dependencies matter):
+1. **Dimension types** (if using dimensions): departments, projects, cost centers
+2. **Dimension values**: values for each dimension type
+3. **Customers**: customer master records
+4. **Vendors**: vendor/supplier master records
+5. **Items**: products and services
+6. **Employees**: employee records (if using payroll)
+
+### Path C (Greenfield)
+
+For new companies with minimal data:
+- Ask what vendors/customers they expect to work with
+- Create interactively: `submit(object_type="vendor", operation="create", data='{...}')` or small batch imports
+- "You can always add more vendors and customers later as you start transacting"
+
+### Path D (Hybrid)
+
+Import each source's export in the Path B order, and agree with the person which source is authoritative where they overlap.
+
+### After All Imports
+
+Present a summary:
+- "Master data import complete:"
+- Vendors: X imported
+- Customers: Y imported
+- Items: Z imported
+- Employees: W imported
+- Dimensions: N types, M values
+
+**CP2 checkpoint**: Master data counts match user expectations.
+
+---
+
+## Phase 3 — Opening Balances and Open Transactions
+
+*Goal: Financial starting position established as of cutoff date. This is the most important phase.*
+
+### Step 5: Collect Balance Sheet
+
+Explain: "Opening balances are your financial starting point in Arfiti — they show exactly where your company stood on the cutoff date. We get these from your old system's balance sheet or trial balance as of [CUTOFF_DATE]."
+
+**All paths:**
+1. Ask user to provide the balance sheet or trial balance as of cutoff date
+2. They can paste it, upload a PDF, or type the numbers
+3. If they upload a document, parse it yourself into account lines (account, name, debit or credit balance) and check that they add up to the document's totals
+4. Map each line to an account in the imported CoA
+5. Flag any lines that don't match — ask user to clarify
+
+### Step 6: Advisory Intelligence Scan
+
+**BEFORE uploading the opening balance**, analyze it to detect what additional data is needed. See **references/advisory-intelligence.md** for the full rule set.
+
+Scan each account line and group findings into three tiers. Classify each line by its `account_type` / `account_subtype` (from the mapped account, `query("account", ...)`), using the line's name as a hint only; never by account-number ranges, which differ between charts and countries.
+
+**Tier 1 — Required for Migration** (without these, key features break):
+- **Accounts Receivable** (subtype `accounts_receivable`, or "receivable"/"debtor" in name): "I see EUR [X] in accounts receivable. For aging reports and collections tracking, I need the list of unpaid customer invoices. For each: customer name, invoice number, amount, date, due date."
+- **Accounts Payable** (subtype `accounts_payable`, or "payable"/"creditor" in name): "I see EUR [X] in accounts payable. For payment scheduling and vendor aging, I need the list of unpaid vendor bills. For each: vendor name, bill number, amount, date, due date."
+- **Fixed Assets** (subtypes `fixed_asset_cost` + `accumulated_depreciation`): "I see EUR [X] in fixed assets with EUR [Y] accumulated depreciation. For the asset register and automatic depreciation, I need each asset: name, acquisition date, cost, depreciation to date, useful life."
+
+**Tier 2 — Recommended** (improves accuracy and automation):
+- **Long-term Loans** (subtype `long_term_debt`, or "loan"/"borrowing"): "I see loan balances. Do you have the loan agreements? I can set up repayment schedules and interest accrual."
+- **Prepaid Expenses** (subtype `prepaid_expense`, or "prepaid"/"prepayment"): "I see prepaid expenses. What are these for? (Insurance, rent, licenses?) This helps with proper amortization."
+- **Tax Liabilities** (subtypes `vat_payable` / `payroll_withholding`, or "tax payable"): "I see outstanding tax liabilities. What taxes are these? This affects your first filing period."
+
+**Tier 3 — Suggested** (operational improvements):
+- **Investment Accounts** (subtype `investment_long_term`, or "investment"/"financial asset"): "I see investment accounts. Do you have documentation for proper classification?"
+- **Payroll Liabilities** (subtypes `accrued_payroll` / `payroll_withholding`, or "salary payable"/"wages"): "I see unpaid payroll. Are there outstanding salary obligations?"
+- **Multiple Bank Accounts**: "I see multiple bank accounts. Would you like to connect bank feeds for automatic reconciliation?" (bank feeds are connectors: `get_connectors` / `manage_connectors`; they are optional)
+- **Revenue Patterns**: "Based on your revenue accounts, do you have recurring contracts or subscriptions?"
+
+Present findings conversationally: "Based on your balance sheet, I have a few questions before we proceed..." Group by tier. For Tier 1, explain the tradeoff clearly: "Without individual invoices, the total is still correct but aging reports won't show individual receivables."
+
+### Step 7: Upload Opening Balance
+
+**Agree the opening date first.** The opening entry is dated the first day of the fiscal period named in `fiscal_period_name`, unless `opening_date` names another day inside that period (`opening_balances` only; the subledger version always uses the period's first day). Balances as at the cutoff D with go-live on D+1 open on D+1: name the period containing D+1. A trial balance as at 31 October 2026 with a 1 November cutover goes to `fiscal_period_name="2026-11"`, dated 1 November; do not choose 2026-10 because the source is dated 31 October (that would date it 1 October). An entry dated 31 October is a separate choice the user must make explicitly (`fiscal_period_name="2026-10", opening_date="2026-10-31"`); a mid-period go-live such as 15 November uses `opening_date="2026-11-15"`.
+
+Before the upload, two checks:
+
+- **Existing opening entries in any period.** One opening entry per entity and period is enforced, but only per period: an entry already posted in another period (for example dated 1 October when the agreed opening is 1 November) is not refused. Look for them with `query("transaction", filters={"legal_entity_id": ENTITY_ID, "transaction_type": "OPENING_ENTRY"})`; if one is wrong, reverse it first. A refusal names the existing entry under `existing_opening_entry` with its own date.
+- **Income and expense accounts at a fiscal-year boundary.** If the cutoff is the last day of a fiscal year and the trial balance still holds revenue or expense accounts (not yet closed to equity, for example retained earnings), say what each choice does before proposing one; the full table is in references/opening-balance-checklist.md ("At a fiscal-year boundary"). The tool posts whatever date it is given and the amounts are posted as given; the reports differ. Dated the new year's first day, an income statement covering that day comes back `quality: "incomplete"` without totals (gap `AMBIGUOUS_PERFORMANCE_JOURNAL`) and the new year's balance sheet leaves equity open, and no tool clears that. Dated the old year's last day (`opening_date`), the new year's balance sheet balances with the amount under "Prior years result (not closed)" and the new year's income statement is complete, but income statements covering the old year's last day are withheld and the balance sheet on that day has no equity total (check the import with the trial balance report). So: (1) ask for a closed trial balance first (balance-sheet accounts only), explaining which reports are withheld rather than saying "every figure will be wrong"; (2) if they cannot provide one, propose the last day of the old year, state that exact date and period, and get the customer's agreement before posting. This is the one exception to "balances as at D open on D+1" the assistant proposes on its own (Andrew, 24 Nov 2026, AR-1456), guidance for the assistant, not a rule the server enforces; (3) it needs `opening_balances` (or the CSV import), since `opening_balances_with_subledger` takes no `opening_date` and refuses one, so with open items ask for the closed trial balance; and an open last period of the old year: a closed or locked period is refused before anything is written, and reopening it is the accountant's decision; if that period does not exist because the books never ran here that year, creating it is the person's or accountant's decision (its report behaviour is untested); (4) the customer or their accountant chooses: never decide how the old year's result is closed, never post a closing entry on your own, and never present one country's year-end rule as general (point to the country pack or the accountant).
+
+- **A mid-year cutoff with year-to-date income and expense in the trial balance** has no agreed treatment. Do not drop those lines or pick a date on your own: say the case is open, ask the customer or their accountant, and state what each choice does (left out, the year-to-date result falls into the balancing account and this year's income statement covers only the time after the cutover; included, every income statement covering the opening date is withheld and the balance sheet's equity stays open for the rest of that year).
+- **What must exist before posting.** For the opening entry: the accounts it names (with `account_subtype` on the control accounts), the balancing equity account the customer chose, the customers and vendors behind any open items (import them first: the migration matches them by name and creates any it does not find, so importing avoids near-duplicates), a fixed asset category for each asset and a `fixed_asset` number series for the entity (without it the whole migration is refused), and an open monthly period containing the opening date. For the first documents after it: a posting profile for each transaction type the company uses, bank accounts for bank lines, and tax codes with their tax accounts for taxed lines. `get_onboarding(action="check_status")` reports what exists per entity (its period check is for today; read the opening date's period with `query("fiscal_period", ...)`); read the gaps back to the customer instead of assuming them.
+
+Run the upload with `validate_only=true` first. Its answer states `posting_date` and `posting_period`: tell the user "the opening entry will be dated <posting_date> (period <name>)" and wait for their agreement before posting. Never describe the entry as "as at" a date other than its `posting_date`.
+
+Based on what details the user provided:
+
+**With subledger details (Tier 1 data provided):**
+```
+manage_imports(
+    action="opening_balances_with_subledger",
+    legal_entity_id=ENTITY_ID,
+    balances=[
+        {"account_number": "1000", "debit": "50000.00", "credit": "0"},
+        {"account_number": "1200", "debit": "25000.00", "credit": "0"},
+        ...
+    ],
+    fiscal_period_name="YYYY-MM",
+    balancing_account_number="<equity account the client chose>",
+    open_ar_items=[
+        {"customer_name": "Customer A", "reference_number": "INV-001", "amount": 10000, "invoice_date": "2024-06-15", "due_date": "2024-07-15"},
+        ...
+    ],
+    open_ap_items=[
+        {"vendor_name": "Vendor B", "reference_number": "BILL-042", "amount": 5000, "invoice_date": "2024-11-01", "due_date": "2024-12-01"},
+        ...
+    ],
+    fixed_assets_detail=[
+        {"name": "Office Laptop", "acquisition_date": "2023-03-01", "original_cost": 1500, "accumulated_depreciation": 500, "useful_life_months": 36},
+        ...
+    ]
+)
+```
+
+**Without subledger details (basic opening balance):**
+```
+manage_imports(
+    action="opening_balances",
+    legal_entity_id=ENTITY_ID,
+    balances=[...],
+    fiscal_period_name="YYYY-MM",
+    balancing_account_number="<equity account the client chose>"
+)
+```
+
+Explain the balancing account: "The equity account you chose absorbs the difference that keeps the opening entry balanced. AR and AP balances come from the individual invoices and bills, so aging works correctly." `balancing_account_number` has no default. Ask the client (or their accountant) which equity account absorbs the opening-balance difference; offer the accounts whose `account_subtype` is `retained_earnings` (or an opening-balance equity account they use) from `query("account", filters={"legal_entity_id": ENTITY_ID, "account_type": "equity"})`, and record their choice. Never assume an account number.
+
+### Step 8: Verify Opening Balance
+
+1. Read back the stored date: the posting result's `posting_date`, or `get_imports(action="get_opening_balances", legal_entity_id=ENTITY_ID, fiscal_period_name="YYYY-MM")`. It must be the date the user agreed.
+2. Run the trial balance on the opening date, and on the day before it (which must show none of the opening amounts):
+   ```
+   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "OPENING_DATE"})
+   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "DAY_BEFORE_OPENING_DATE"})
+   ```
+3. Compare each line on the opening date with user's source balance sheet
+4. Flag discrepancies — common issues:
+   - Retained earnings may differ (includes prior year net income — expected)
+   - Rounding differences of a few cents (handled by balancing account)
+   - Accounts not mapped correctly: find what the first import already saved (`get_imports(action="status", import_id=...)`, `query("transaction", ...)` for the opening entry) and correct those records or reverse the entry before importing again; never import the same lines twice
+
+**CP3a checkpoint**: The stored `posting_date` is the agreed opening date, and the trial balance on that date balances (debits = credits).
+**CP3b checkpoint**: Trial balance matches source balance sheet within rounding tolerance.
+**CP3c checkpoint**: Subledger records created — AR invoices, AP bills, FA register (if details provided).
+
+If subledger records were created, verify:
+- `generate_report("ar_aging", {"legal_entity_id": ENTITY_ID, "as_of_date": "CUTOFF_DATE"})` — shows individual invoices
+- `generate_report("ap_aging", {"legal_entity_id": ENTITY_ID, "as_of_date": "CUTOFF_DATE"})` — shows individual bills
+- `query("fixed_asset", filters={"legal_entity_id": ENTITY_ID})` — shows asset register
+
+---
+
+## Phase 4 — Gap Period Transactions
+
+*Goal: Bring transactions from cutoff date to today. Skip this phase if cutoff date is today or in the future.*
+
+### Step 9: Choose Gap Period Strategy
+
+Explain: "Your cutoff date was [DATE] but today is [TODAY], so we have [N] months of transactions to bring into Arfiti. Here are your options:"
+
+Present three strategies. See **references/gap-period-strategies.md** for detailed guidance.
+
+**Strategy A — Full Transaction Import** (recommended for clean exports):
+- Best when: you can export all transactions from the old system as CSV
+- How: bulk import via `manage_imports(action="transactions", records=[...])`
+- Advantage: fastest, preserves original transaction details
+- Limitation: requires structured export from old system
+
+**Strategy B — Bank Statement Processing** (recommended when no transaction export available):
+- Best when: you only have bank statements, no structured transaction export
+- How: upload bank statements month by month, classify each line, post transactions
+- Advantage: works with just bank data
+- Limitation: slower, may miss non-bank transactions (accruals, depreciation)
+
+**Strategy C — Admin Portal Bulk Upload** (recommended for >500 transactions):
+- Best when: large volume of transactions to import
+- How: prepare CSV in the required format, upload via admin dashboard
+- Advantage: handles large volumes efficiently
+- Limitation: requires CSV in specific format
+
+Recommend a strategy based on path + volume:
+- Path B with transaction export available → Strategy A (CSV import)
+- Path B without transaction export → Strategy B (bank statements)
+- Any path with >500 transactions → Strategy C (admin bulk upload)
+
+### Step 10: Execute Gap Period Strategy
+
+**Strategy A — Full Transaction Import:**
+
+For CSV import:
+1. Show required format: `get_onboarding(action="get_support", support_type="import_transactions")`
+2. User provides transaction CSV
+3. Validate: `manage_imports(action="transactions", records=[...], validate_only=true)`
+4. Import: `manage_imports(action="transactions", records=[...], legal_entity_id=ENTITY_ID)`
+5. Monitor if async: `get_imports(action="status", import_id=...)`
+
+**Strategy B — Bank Statement Processing:**
+
+Process month by month (same approach as year-end-bookkeeping Phase 3):
+
+For each month in the gap period:
+1. Ask user to upload bank statement for the month
+2. Parse: extract date, amount, counterparty, description for each line
+3. Check for new counterparties not yet in the system
+4. Present new counterparties for review — create as vendors/customers after confirmation
+5. Classify each line by transaction type:
+   - Outflow to vendor → AP_PAYMENT
+   - Inflow from customer → AR_PAYMENT
+   - Bank fee keywords → BANK_FEE
+   - Interest → BANK_INTEREST
+   - Transfer between own accounts → BANK_TRANSFER
+   - Tax payments → JOURNAL_ENTRY
+   - Loan payments → LOAN_REPAYMENT
+6. Present classification table for user review
+7. After confirmation, post each transaction:
+   ```
+   submit(object_type="transaction", operation="post", data=JSON.stringify({
+       "transaction_type_code": "AP_PAYMENT",
+       "legal_entity_id": ENTITY_ID,
+       "vendor_id": VENDOR_ID,
+       "transaction_date": "2026-01-15",
+       "bank_account_id": BANK_ACCOUNT_ID,
+       "lines": [{"account_id": ACCOUNT_ID, "amount": 150.00, "description": "Payment to Vendor X"}]
+   }))
+   ```
+8. Report results: "Month complete: X transactions posted, Y failed"
+
+Ask about source documents (bills, invoices) for the gap period — same as year-end-bookkeeping Phase 4 (identify gaps, request missing documents, post).
+
+**Strategy C — Admin Portal Bulk Upload:**
+1. Provide template format via `get_onboarding(action="get_support", support_type="import_transactions")`
+2. Guide user to prepare CSV in the required format
+3. Direct them to admin dashboard for upload
+4. Monitor: `get_imports(action="status", import_id=...)`
+
+**CP4 checkpoint**: Gap period transactions posted. Run trial balance at today's date — debits = credits.
+
+---
+
+## Phase 5 — Verification and Go-Live
+
+*Goal: Confirm everything is correct. Present migration summary. Advise on next steps.*
+
+### Step 11: Run Verification Suite
+
+Run all reports and checks:
+
+1. **Trial Balance:**
+   ```
+   generate_report("trial_balance", {"legal_entity_id": ENTITY_ID, "as_of_date": "TODAY"})
+   ```
+   **CP5a**: Total debits = total credits.
+
+2. **Balance Sheet:**
+   ```
+   generate_report("balance_sheet", {"legal_entity_id": ENTITY_ID, "as_of_date": "TODAY"})
+   ```
+   **CP5b**: Assets = Liabilities + Equity.
+
+3. **Income Statement** (for gap period, if applicable):
+   ```
+   generate_report("income_statement", {"legal_entity_id": ENTITY_ID, "start_date": "GAP_START", "end_date": "TODAY"})
+   ```
+   Review — does revenue and expense make sense?
+
+4. **AP Aging:**
+   ```
+   generate_report("ap_aging", {"legal_entity_id": ENTITY_ID, "as_of_date": "TODAY"})
+   ```
+   Check: do open bills match what user expects?
+
+5. **AR Aging:**
+   ```
+   generate_report("ar_aging", {"legal_entity_id": ENTITY_ID, "as_of_date": "TODAY"})
+   ```
+   Check: do open invoices match what user expects?
+
+6. **Bank Balances:**
+   For each bank account: `get_entity("bank_account", id=BANK_ID)`
+   Compare system balance vs user's actual bank balance. Flag any variances.
+
+7. **Fixed Asset Reconciliation** (if assets were imported):
+   ```
+   generate_report("fa_gl_reconciliation", {"legal_entity_id": ENTITY_ID})
+   ```
+   **CP5d**: No material variances.
+
+### Step 12: Migration Summary Dashboard
+
+Present a comprehensive summary:
+
+```
+=== Migration Summary ===
+
+Entity: [ENTITY_NAME] (ID: [ENTITY_ID])
+Migration Path: [A/B/C/D]
+Cutoff Date: [DATE]
+Gap Period: [START] to [END] ([N] months)
+
+--- Master Data ---
+Vendors:    [X] imported
+Customers:  [Y] imported
+Items:      [Z] imported
+Employees:  [W] imported
+Fixed Assets: [N] imported
+
+--- Financial Data ---
+Opening Balance Total: [AMOUNT] (debits = credits)
+Gap Period Transactions: [N] posted
+Total Transactions in System: [N]
+
+--- Verification ---
+Trial Balance:    [PASS/FAIL]
+Balance Sheet:    [PASS/FAIL] (Assets [X] = L+E [X])
+Bank Balances:    [PASS/FAIL] ([N] accounts checked)
+FA Reconciliation: [PASS/FAIL]
+AR Aging:         [X] open invoices, total [AMOUNT]
+AP Aging:         [X] open bills, total [AMOUNT]
+
+--- Status ---
+[ALL CHECKS PASSED / N issues need attention]
+```
+
+### Step 13: Close Migration
+
+If all checks pass:
+1. Ask user to confirm: "Does the migrated data look correct?" Then list the configuration and accounting-acceptance items that are still open; going live is the client's decision once those are done
+2. Update migration state:
+   ```
+   manage_agents(action="store_memory", agent_type="implementation_consultant",
+       memory_key="migration_state:ENTITY_ID",
+       memory_value='{"status": "completed", "completed_at": "TODAY", ...}',
+       memory_type="observation", confidence=1.0, legal_entity_id=ENTITY_ID)
+   ```
+3. Present next steps:
+   - "Your migration is complete! Here's what to do next:"
+   - Connect bank feeds, if they want them (connectors: `get_connectors`)
+   - Configure agent email addresses to forward bills for automated processing
+   - Set up recurring contracts for subscription billing
+   - Plan first payroll run (if employees were imported)
+   - Schedule first month-end close
+   - Consider setting up budget tracking
+
+**CP5e checkpoint**: User confirms the migration (data moved and reconciled) is complete. This is not a statement that the company is ready to run on Arfiti: configuration and accounting acceptance are separate (see "Migration complete is not ready" below).
+
+---
+
+## Migration complete is not ready
+
+Keep three states apart and report each honestly (done, pending, failed, deferred or not applicable, with the reason):
+
+1. **Migration**: data moved and reconciled (CP1–CP5).
+2. **Configuration**: the settings this client uses are set and read back: tax codes and registrations, payment terms (onboarding seeds `DUE_ON_RECEIPT` and `NET_10/15/30/60/90`; create any other the client uses), transaction-type settings (`query("transaction_type_setting", ...)`), approvals and user access, and any optional module they chose (budgets, projects, expenses, pricing, agents, bank-feed connectors). Optional modules are only checked when the client uses them.
+3. **Accounting acceptance**: the client's accountant confirms the opening position, the first period's postings and the reports they rely on.
+
+A saved setting is not proof that it works downstream; say what was verified and what was not.
+
+## Error Handling
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| "Account not found" | CoA mapping missed an account | Create the missing account, then resubmit only the records that failed (check what the import already saved first) |
+| "Vendor/Customer not found" | Master data not imported before transactions | Import master data first (Phase 2), then retry |
+| "Period is closed" | Trying to post to a closed period | Stop and ask the client's accountant: reopening a closed period is their decision, with its own approval. Do not reopen, post and re-close on your own |
+| "Debits don't equal credits" | Unbalanced opening balance or journal entry | Check account mapping and amounts; nothing was posted for a refused entry, so correct it and submit once |
+| "Duplicate transaction" | Same record imported twice | Check existing records, use `on_duplicate="skip"` |
+| "Import timeout" | Large batch exceeded timeout | Use async import (>50 records) and poll with `get_imports(action="status", import_id=...)` |
+| Opening balance mismatch | Account mapping error | Review the mapping; correct the posted opening entry (or reverse it) rather than importing the lines again |
+| Bank balance variance | Missing or extra transactions | Compare transaction list vs bank statement, find the gap |
+
+## Output Format
+
+At each phase completion, present:
+- What was accomplished (with concrete numbers)
+- Any issues found
+- Next steps
+- Progress percentage across all phases

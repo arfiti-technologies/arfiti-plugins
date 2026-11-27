@@ -35,6 +35,18 @@ One plugin, [arfiti-ee](./arfiti-ee), with four skills. A country pack is one pl
 
 More countries coming soon.
 
+### Cursor
+
+[cursor/arfiti](./cursor/arfiti) is the same core plugin packaged for Cursor: the Arfiti connector and the core skills (operating guide, agent procedures, financial reports, budget planning, cost allocation, migration and country setup), without the Claude-specific slash commands and subagents. A few pages still name other assistants where they describe Arfiti's own admin screens. Ask for the work in plain words and the matching skill is loaded.
+
+- **Install:** from the Cursor Marketplace once it is listed, or copy `cursor/arfiti` to `~/.cursor/plugins/local/arfiti` and restart Cursor.
+- **Sign in:** open Cursor's MCP settings and choose **Sign In** next to `arfiti`. A browser window opens at `id.arfiti.com`; sign in with your Arfiti account, or use the sign-up option there to create a company. The consent screen names Cursor and shows `www.cursor.com` as the place you return to.
+- **What it can reach:** only the company and legal entities your account can access, with your role's permissions. Every write goes through your organisation's approval workflow. It moves no money: sending a payment batch to a bank is done from the Arfiti dashboard.
+- **Configuration:** none. The plugin holds no keys or tokens.
+- **Support:** [arfiti.com/contact/support](https://arfiti.com/contact/support) or support@arfiti.com.
+
+This folder and `.cursor-plugin/marketplace.json` are generated from the core plugin; changes made to them here are overwritten.
+
 ## Getting Started
 
 ### Option 1: Clone the repository
@@ -43,7 +55,7 @@ More countries coming soon.
 git clone https://github.com/arfiti-technologies/arfiti-plugins.git
 ```
 
-Add the plugin directory to your Claude Desktop project or Cursor workspace.
+Add the plugin directory to your Claude Desktop project. For Cursor, use the `cursor/arfiti` folder (see Cursor above).
 
 ### Option 2: Download ZIP
 
