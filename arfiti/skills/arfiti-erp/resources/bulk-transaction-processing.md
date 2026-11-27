@@ -597,8 +597,8 @@ Companies can enable batch-level approval for bulk imports. When enabled, import
 
 ### Configuration
 
-- **Approval OFF** (default): imports process immediately — best for migrations and trusted operations
-- **Approval ON**: enable the `import_batch.review` workflow definition in the admin dashboard
+- **Default** (migration 942): every organisation has an active `import_batch.review`; a transaction import carries no payee bank details, so it is green and runs at once. Only vendor or employee imports with bank details wait for an owner or admin
+- **Your organisation's configuration**: the definition's lane rules and step can be edited, or the definition deactivated
   - Which lane the batch gets, and whether that lane has approval steps, is your organisation's workflow configuration
   - A lane with no approval step completes at once (useful for an audit trail without blocking); a lane with approval steps waits for them before processing. The `status` in the result is authoritative
 
