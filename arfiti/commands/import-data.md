@@ -16,6 +16,6 @@ Help me import data into Arfiti:
 6. Show validation results — fix any errors
 7. Run the actual import
 8. If async (more than 50 records, or a CSV file), monitor progress with `get_imports(action="status", import_id=...)`
-9. Show final results: imported, updated, skipped, errors. A `completed` import can still have refused rows: show `error_count` and the errors, and say that the full row list is on the import's page in the dashboard
+9. Show final results: imported, updated, skipped, errors. A `completed` import can still have refused rows: show `error_count` and the errors, and say that the full row list is on the import's page in the dashboard. When every row failed, the answer says `posting_unknown` and gives an `import_id`: read `get_imports(action="status", import_id=...)` for the row errors; when it shows nothing imported or updated, fix the cause and run the import again with a new `idempotency_key`
 
 Use the Implementation Consultant skill for data quality rules and validation guidance.
