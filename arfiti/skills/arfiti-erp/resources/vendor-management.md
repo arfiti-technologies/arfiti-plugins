@@ -582,6 +582,8 @@ Store integration IDs and custom attributes:
 
 Use the `vendor.update` workflow to modify existing vendors.
 
+> **Bank details wait for review** (AR-1556, migration 943): in the shipped definitions a `vendor.update` that carries a non-empty `vendor_bank_accounts` (add, update or delete), every `vendor_bank_account.create` and `vendor_bank_account.delete`, and a `vendor_bank_account.update` that sets `is_default`, `is_active`, `requires_dual_approval` or a limit wait for an owner or admin. The answer is `status: "pending"` with a `workflow_id`; the bank account exists once a person approves it, and a rejection writes nothing. Do not resubmit a pending request. An update without bank details (or a nickname or holder change) runs at once. Each organisation can change this in its own definitions.
+
 **Fields:** `get_submissions(action="schema", object_type="vendor", operation="update")` returns the complete field list.
 
 ### Update Basic Information

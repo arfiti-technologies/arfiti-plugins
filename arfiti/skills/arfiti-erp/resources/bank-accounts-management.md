@@ -685,6 +685,8 @@ Vendor bank accounts store payment instructions for paying vendors.
 
 Use the `vendor_bank_account.create` workflow to add vendor payment accounts.
 
+In the shipped definitions every new vendor bank account, every removal (`vendor_bank_account.delete`) and an update that sets `is_default`, `is_active`, `requires_dual_approval` or a limit wait for an owner or admin (AR-1556, migration 943): the answer is `status: "pending"` with a `workflow_id`, and the change takes effect once a person approves it. Do not resubmit a pending request. An organisation can change this in its own definition.
+
 **Workflow: vendor_bank_account.create**
 
 ```javascript

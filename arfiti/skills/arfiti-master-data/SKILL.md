@@ -39,7 +39,7 @@ workflow_id: <id or none>
 name: <name on the record>
 tax_code: <code or none>                 country: <code or none>
 registry_check: <register and result, or "not required by rules", or "not possible: <why>">
-bank_account: added | already_on_record | not_supplied | not_added: <why>
+bank_account: added | awaiting_approval | already_on_record | not_supplied | not_added: <why>
 fields_sent: <each optional field you sent and its source: document | register | records | client rule>
 forced_fields: <fields the create schema requires that the brief and records do not hold, and
   what happened (refused, asked), or none; never a placeholder>
@@ -289,7 +289,9 @@ the account (for an IBAN account in a SEPA currency, `sepa`).
   [{"_action": "add", "legal_entity_id": X, "iban": "...", "swift_code": "...",
   "account_holder_name": "...", "currency_code": "<ISO>", "payment_method": "<from schema>"}]}))`.
   `legal_entity_id` inside each added account is required (accounts are
-  entity-scoped).
+  entity-scoped). In the shipped definition this update waits for an owner or
+  admin (AR-1556): `status: "pending"` with a `workflow_id` is the expected
+  answer; report `bank_account: awaiting_approval` and do not resubmit.
 - Existing vendor whose account differs from the one on the document: do not
   change or add it. A changed payee account is a classic fraud pattern: report
   `bank_account: not_added: differs from the account on record` and put it in
