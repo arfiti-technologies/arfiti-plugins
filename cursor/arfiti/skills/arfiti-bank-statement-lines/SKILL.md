@@ -327,12 +327,16 @@ and continue each one, including lines another session left waiting.
 once per type you use; `validate_only=true` first for a type new in the session.
 
 **A posting already waiting for approval is not posted again.** Before you
-post for a line, look at what this agent has already submitted for it:
-`get_submissions(action="history")` (an earlier session's submissions are
-yours too), and the result blocks of your own tasks about the line. A
-submission for the same line that is still pending means the entry exists
-and waits for a person: post nothing, say which workflow it waits on, and
-match the line once that workflow is approved. You cannot withdraw a pending
+post for a line, look up what has already been submitted for it, under any
+idempotency key and from any session:
+`query("workflow_instance", filters={"source_bank_statement_line_id": L, "status": ["pending", "in_progress"]})`
+(for a card transaction, `filters={"card_transaction_id": C, ...}`), and the
+result blocks of your own tasks about the line. If that lookup answers with an
+error, you do not know what is pending: post nothing for the line and report it
+under `gaps` with the error. A submission for the same
+line that is still pending means the entry exists and waits for a person:
+post nothing, say which workflow it waits on (its `id`), and match the line
+once that workflow is approved. You cannot withdraw a pending
 submission, so a second one for the same line can only be removed by the
 approver rejecting it; if you find two, report both workflow ids under
 `gaps` and raise one `system_refusal` task saying which to reject. Never use
@@ -420,7 +424,7 @@ idempotent: an idempotency key replays the first result). A refusal follows
 second leg has its own fallback in step 3.
 
 A posting refused because one already exists for this line: do not post again.
-The query tool does not expose `source_bank_statement_line_id`, so find the
+The query tool does not expose `source_bank_statement_line_id` on `transaction`, so find the
 existing journal with step 3.1's candidates and match it if exactly one fits;
 otherwise report the line.
 
