@@ -49,7 +49,7 @@ submit(object_type="<type>", operation="import", data=JSON.stringify({
 | Object Type | Required Fields | Duplicate Key | Notes |
 |-------------|----------------|---------------|-------|
 | `customer` | customer_name, email | tax_id, then customer_name | Supports billing/shipping addresses |
-| `vendor` | vendor_name, email, payment_terms_code | tax_id, then vendor_name | Supports billing/remit-to addresses |
+| `vendor` | the organisation's `vendor.create` required fields (template: vendor_name, country) | tax_id, then vendor_name | Supports billing/remit-to addresses. email and payment_terms_code are optional: empty on a new vendor, unchanged on an update when left out |
 | `employee` | first_name, last_name, work_email, hire_date | work_email | Auto-generates global_employee_id |
 | `account` | account_number, account_name, account_type, normal_balance | account_number | Supports parent_account_number hierarchy |
 | `item` | item_number, item_name | item_number | Revenue/expense/asset/COGS account linking |
